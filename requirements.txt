@@ -1,4 +1,0 @@
-fastapi
-supabase
-anthropic
-openpyxl
