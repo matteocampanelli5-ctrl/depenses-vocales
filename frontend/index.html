@@ -6,6 +6,10 @@
 <title>Kaching</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#0f1115">
+<script>
+  try { var t = localStorage.getItem("kaching_theme"); if (t === "rose") document.documentElement.setAttribute("data-theme", "rose"); } catch (e) {}
+  var IS_ROSE = document.documentElement.getAttribute("data-theme") === "rose";
+</script>
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -28,6 +32,27 @@
     --success: #22c55e;
     --radius: 14px;
   }
+  :root[data-theme="rose"] {
+    color-scheme: light;
+    --bg: #fdf3f5;
+    --surface: #ffffff;
+    --surface-2: #fbe8ed;
+    --border: #f4d3dc;
+    --text: #4d3641;
+    --text-dim: #a08590;
+    --accent: #e68aa6;
+    --accent-dim: #cf6c8c;
+    --danger: #e0566f;
+    --success: #5fb48d;
+    --radius: 20px;
+  }
+  :root[data-theme="rose"] body { font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif; }
+  :root[data-theme="rose"] button, :root[data-theme="rose"] .tab-btn { border-radius: 999px; }
+  :root[data-theme="rose"] .icon-btn:hover { background: #f8dde4; }
+  :root[data-theme="rose"] .icon-btn.danger:hover { background: #fbd9df; }
+  .theme-choice { display: flex; gap: 0.5rem; margin: 0.5rem 0 1rem; }
+  .theme-choice button { flex: 1; padding: 0.7rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 0.95rem; border-radius: 12px; }
+  .theme-choice button.active { border-color: var(--accent); background: var(--accent); color: #fff; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
@@ -1713,6 +1738,11 @@
     </section>
 
     <section id="view-help" class="help-section">
+      <h3 style="margin:0 0 0.25rem;">🎨 Apparence</h3>
+      <div class="theme-choice" id="theme-choice">
+        <button type="button" data-theme-value="dark">🌙 Sombre</button>
+        <button type="button" data-theme-value="rose">🌸 Rose doux</button>
+      </div>
       <p class="recurring-hint">
         Toutes les fonctionnalités de l'appli, expliquées pas à pas. Appuie
         sur une question pour voir le chemin à suivre.
@@ -2181,6 +2211,19 @@
     });
 
     // --- Déconnexion ---
+    (function setupThemeChoice() {
+      const current = IS_ROSE ? "rose" : "dark";
+      document.querySelectorAll("#theme-choice button").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.themeValue === current);
+        btn.addEventListener("click", () => {
+          try { localStorage.setItem("kaching_theme", btn.dataset.themeValue); } catch (e) {}
+          location.reload();
+        });
+      });
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta && IS_ROSE) meta.setAttribute("content", "#fdf3f5");
+    })();
+
     document.getElementById("logout-btn").addEventListener("click", async () => {
       const ok = await showConfirm("Se déconnecter ? Tu devras ressaisir ton mot de passe pour revenir.");
       if (ok) showLockScreen("login");
@@ -3873,7 +3916,14 @@
     // -------------------------------------------------------------------
     const monthFormatter = new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" });
     const monthShortFormatter = new Intl.DateTimeFormat("fr-FR", { month: "short", year: "numeric" });
-    const CHART_COLORS = ["#3b82f6", "#22c55e", "#ef4444", "#f59e0b", "#a855f7", "#14b8a6", "#ec4899", "#64748b"];
+    const CHART_COLORS = IS_ROSE
+      ? ["#e68aa6", "#f7c1b3", "#c9a7e8", "#f4b6d2", "#9fd8c8", "#f9d78f", "#b7c9f2", "#d9a0b3"]
+      : ["#3b82f6", "#22c55e", "#ef4444", "#f59e0b", "#a855f7", "#14b8a6", "#ec4899", "#64748b"];
+    const _cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    const CH_TEXT = _cssVar("--text");
+    const CH_DIM = _cssVar("--text-dim");
+    const CH_GRID = _cssVar("--border");
+    const CH_SURFACE = _cssVar("--surface");
 
     // -------------------------------------------------------------------
     // Chargement de Chart.js : la bibliothèque est auto-hébergée (servie
@@ -4031,7 +4081,7 @@
           datasets: [{
             data,
             backgroundColor: labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
-            borderColor: "#1a1d24",
+            borderColor: CH_SURFACE,
             borderWidth: 2,
           }],
         },
@@ -4039,7 +4089,7 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { position: "bottom", labels: { color: "#e6e6e6", boxWidth: 12, padding: 12, font: { size: 11 } } },
+            legend: { position: "bottom", labels: { color: CH_TEXT, boxWidth: 12, padding: 12, font: { size: 11 } } },
             tooltip: { callbacks: { label: (ctx) => `${ctx.label} : ${currencyFormatter.format(ctx.parsed)}` } },
           },
         },
@@ -4080,7 +4130,7 @@
           datasets: [{
             data,
             backgroundColor: labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
-            borderColor: "#1a1d24",
+            borderColor: CH_SURFACE,
             borderWidth: 2,
           }],
         },
@@ -4088,7 +4138,7 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { position: "bottom", labels: { color: "#e6e6e6", boxWidth: 12, padding: 12, font: { size: 11 } } },
+            legend: { position: "bottom", labels: { color: CH_TEXT, boxWidth: 12, padding: 12, font: { size: 11 } } },
             tooltip: { callbacks: { label: (ctx) => `${ctx.label} : ${currencyFormatter.format(ctx.parsed)}` } },
           },
         },
@@ -4145,11 +4195,11 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
-            y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" }, beginAtZero: true },
+            x: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
+            y: { ticks: { color: CH_DIM }, grid: { color: CH_GRID }, beginAtZero: true },
           },
           plugins: {
-            legend: { labels: { color: "#e6e6e6" } },
+            legend: { labels: { color: CH_TEXT } },
             tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label} : ${currencyFormatter.format(ctx.parsed.y)}` } },
           },
         },
@@ -4262,14 +4312,14 @@
             datasets: [{
               data: catEntries.map(([, v]) => v),
               backgroundColor: catEntries.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
-              borderColor: "#1a1d24",
+              borderColor: CH_SURFACE,
             }],
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-              legend: { position: "bottom", labels: { color: "#e6e6e6", boxWidth: 12 } },
+              legend: { position: "bottom", labels: { color: CH_TEXT, boxWidth: 12 } },
               tooltip: {
                 callbacks: {
                   label: (ctx) => {
@@ -4302,8 +4352,8 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
-            y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+            x: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
+            y: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
           },
           plugins: {
             legend: { display: false },
@@ -4576,10 +4626,10 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
-            y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+            x: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
+            y: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
           },
-          plugins: { legend: { labels: { color: "#e6e6e6" } } },
+          plugins: { legend: { labels: { color: CH_TEXT } } },
         },
       }, emptyEl);
 
@@ -6111,10 +6161,10 @@
               responsive: true,
               maintainAspectRatio: false,
               scales: {
-                x: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
-                y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+                x: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
+                y: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
               },
-              plugins: { legend: { labels: { color: "#e6e6e6" } } },
+              plugins: { legend: { labels: { color: CH_TEXT } } },
             },
           });
         }
@@ -6657,8 +6707,8 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { ticks: { color: "#9aa0ac", maxTicksLimit: 6 }, grid: { color: "#2a2e38" } },
-            y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+            x: { ticks: { color: CH_DIM, maxTicksLimit: 6 }, grid: { color: CH_GRID } },
+            y: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
           },
           plugins: {
             legend: { display: false },
@@ -6709,11 +6759,11 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { ticks: { color: "#9aa0ac", maxTicksLimit: 8 }, grid: { color: "#2a2e38" } },
-            y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+            x: { ticks: { color: CH_DIM, maxTicksLimit: 8 }, grid: { color: CH_GRID } },
+            y: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } },
           },
           plugins: {
-            legend: { labels: { color: "#e6e6e6" } },
+            legend: { labels: { color: CH_TEXT } },
             tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label} : ${currencyFormatter.format(ctx.parsed.y)}` } },
           },
         },
