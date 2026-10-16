@@ -3,10 +3,14 @@
 parfois le même modèle, ex: TransactionType)."""
 
 from datetime import date
+from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.config import MAX_GENERIC_IMPORT_ENTRIES, TransactionType
+
+AccountKind = Literal["bank", "savings", "investment", "other"]
 
 # ---------------------------------------------------------------------------
 # Comptes — inscription (sur invitation uniquement), connexion, mot de passe
@@ -40,12 +44,21 @@ class InviteRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Modèles de données
 # ---------------------------------------------------------------------------
+# `account_id` : le compte d'où part l'argent (dépense) ou où il arrive
+# (revenu). `transfer_account_id` : renseigné uniquement pour un virement
+# entre deux comptes de l'utilisateur — c'est l'autre compte (destination
+# pour une sortie, provenance pour une entrée). Un virement n'est ni une
+# dépense ni un revenu : il est exclu de tous les totaux.
 class TransactionIn(BaseModel):
     type: TransactionType = "expense"
     amount: float = Field(gt=0)
     category: str = "autre"
     description: str | None = None
     expense_date: date | None = None  # None => aujourd'hui (Europe/Paris)
+    account_id: UUID | None = None
+    transfer_account_id: UUID | None = None
+    # Prêt de l'onglet Prêts que cette opération rembourse (mensualité).
+    loan_id: UUID | None = None
 
 
 class TransactionUpdate(BaseModel):
@@ -54,6 +67,45 @@ class TransactionUpdate(BaseModel):
     category: str | None = None
     description: str | None = None
     expense_date: date | None = None
+    # Nullables explicitement : envoyer null retire le compte / annule le
+    # statut de virement (contrairement aux champs ci-dessus où null veut
+    # juste dire "pas touché").
+    account_id: UUID | None = None
+    transfer_account_id: UUID | None = None
+    loan_id: UUID | None = None
+
+
+# ---------------------------------------------------------------------------
+# Comptes (banques, livrets, placements) et soldes relevés
+# ---------------------------------------------------------------------------
+class AccountIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    kind: AccountKind = "bank"
+    # Taux annuel attendu, utile pour la projection d'un livret ou d'un
+    # placement (ex: Livret A). Facultatif.
+    annual_rate_pct: float | None = Field(default=None, ge=0, le=100)
+
+
+class AccountUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    kind: AccountKind | None = None
+    annual_rate_pct: float | None = Field(default=None, ge=0, le=100)
+    active: bool | None = None
+
+
+class AccountBalanceIn(BaseModel):
+    balance_date: date
+    balance: float = Field(ge=-100_000_000, le=100_000_000)
+
+
+# Historique de patrimoine "déclaré" (ex: les relevés Endettement /
+# Patrimoine de Boursorama) : une série à part, indépendante des comptes,
+# pour ne jamais compter deux fois une dette déjà suivie dans Prêts.
+class NetWorthSnapshotIn(BaseModel):
+    snapshot_date: date
+    assets: float = Field(ge=0, le=1_000_000_000)
+    debts: float = Field(ge=0, le=1_000_000_000)
+    label: str | None = Field(default=None, max_length=60)
 
 
 class RecurringExpenseIn(BaseModel):
@@ -101,25 +153,30 @@ class CategoryRatingIn(BaseModel):
     rating: int = Field(ge=1, le=5)
 
 
-# Prêts immobiliers : seules 4 valeurs sont stockées (capital emprunté, taux,
-# mensualité, date de départ) — l'amortissement (intérêts, capital restant
-# dû...) est recalculé à la volée côté frontend à partir de ces 4 valeurs,
-# exactement comme la simulation de placement.
+# Prêts (immobilier ou tout autre crédit) : seules 4 valeurs sont stockées
+# (capital emprunté, taux, mensualité, date de départ) — l'amortissement
+# (intérêts, capital restant dû...) est recalculé à la volée côté frontend à
+# partir de ces 4 valeurs, exactement comme la simulation de placement.
+# `property_name` garde son nom historique mais contient le nom du prêt (un
+# bien immobilier, "Prêt étudiant", "Crédit auto"...). `monthly_rent` :
+# loyer mensuel perçu quand le prêt finance un bien loué, facultatif.
 class PropertyLoanIn(BaseModel):
-    property_name: str = Field(min_length=1)
+    property_name: str = Field(min_length=1, max_length=80)
     principal_amount: float = Field(gt=0)
-    annual_rate_pct: float = Field(ge=0)
+    annual_rate_pct: float = Field(ge=0, le=100)
     monthly_payment: float = Field(gt=0)
     start_date: date
+    monthly_rent: float | None = Field(default=None, ge=0)
 
 
 class PropertyLoanUpdate(BaseModel):
-    property_name: str | None = None
+    property_name: str | None = Field(default=None, min_length=1, max_length=80)
     principal_amount: float | None = Field(default=None, gt=0)
-    annual_rate_pct: float | None = Field(default=None, ge=0)
+    annual_rate_pct: float | None = Field(default=None, ge=0, le=100)
     monthly_payment: float | None = Field(default=None, gt=0)
     start_date: date | None = None
     active: bool | None = None
+    monthly_rent: float | None = Field(default=None, ge=0)
 
 
 class VoiceParseRequest(BaseModel):
@@ -136,6 +193,13 @@ class VoiceParseResult(BaseModel):
     is_correction: bool
     is_recurring: bool
     raw_date_expression: str | None
+    # Virement dicté entre deux comptes de l'utilisateur ("j'ai mis 200 € sur
+    # mon Livret A") : ni dépense ni revenu. account_id = compte de départ
+    # (ou d'arrivée pour un type "income"), transfer_account_id = l'autre.
+    is_transfer: bool = False
+    account_id: str | None = None
+    transfer_account_id: str | None = None
+    transfer_label: str | None = None
     # True si l'IA a un doute réel sur l'interprétation (montant approximatif,
     # catégorie incertaine, phrase ambiguë...) : le frontend doit alors
     # demander confirmation au lieu d'enregistrer directement.
@@ -204,6 +268,8 @@ class GenericImportCommitTransaction(BaseModel):
     amount: float = Field(gt=0)
     category: str = "autre"
     description: str | None = None
+    transfer_account_id: UUID | None = None
+    loan_id: UUID | None = None
 
 
 class GenericImportCommitRecurring(BaseModel):
@@ -217,7 +283,24 @@ class GenericImportCommitRecurring(BaseModel):
 
 
 class GenericImportCommitRequest(BaseModel):
+    # Compte auquel appartient le relevé importé (toutes les lignes) —
+    # facultatif.
+    account_id: UUID | None = None
     transactions: list[GenericImportCommitTransaction] = Field(
         default_factory=list, max_length=MAX_GENERIC_IMPORT_ENTRIES
     )
     recurring: list[GenericImportCommitRecurring] = Field(default_factory=list, max_length=50)
+
+
+# ---------------------------------------------------------------------------
+# Import d'un classeur onglet par onglet (prêts et historique de patrimoine,
+# lus en code — les onglets mensuels passent par l'import générique)
+# ---------------------------------------------------------------------------
+class WorkbookLoanIn(PropertyLoanIn):
+    active: bool = True
+
+
+class WorkbookCommitRequest(BaseModel):
+    loans: list[WorkbookLoanIn] = Field(default_factory=list, max_length=50)
+    snapshots: list[NetWorthSnapshotIn] = Field(default_factory=list, max_length=2000)
+

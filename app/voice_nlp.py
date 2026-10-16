@@ -6,11 +6,12 @@ qui transforme une phrase dictée en brouillon structuré.
 
 import json
 import re
+import unicodedata
 from datetime import date, timedelta
 
 from fastapi import HTTPException
 
-from app.config import ANTHROPIC_API_KEY, TransactionType, category_label, today_paris
+from app.config import ANTHROPIC_API_KEY, TRANSFER_CATEGORY, TransactionType, category_label, today_paris
 from app.emails import _notify_admin_once
 from app.models import VoiceEditResult, VoiceParseResult
 
@@ -217,10 +218,13 @@ def compute_voice_answer(metric: str, category: str | None, period: dict, client
     """Calcule la réponse à une question vocale à partir des vraies données
     (jamais inventée par l'IA). Retourne {"answer": str, "amount": float|None}."""
     period_label = period["label"]
+    # Les virements entre comptes de l'utilisateur (ex: vers le Livret A) ne
+    # sont ni des dépenses ni des revenus : exclus de toutes les réponses.
     transactions = (
         client.table("transactions")
         .select("type, amount, category, expense_date")
         .eq("user_id", user_id)
+        .is_("transfer_account_id", "null")
         .execute()
         .data
     )
@@ -416,6 +420,8 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour, selon l'
   "description": une description courte (sans le montant ni la date), construite UNIQUEMENT à partir des mots-clés réellement prononcés (ex: "j'ai perdu 40 euros au casino" -> "casino", PAS "perte casino" : n'invente pas un nom comme "perte" ou "gain" à partir d'un verbe ("j'ai perdu", "j'ai gagné") s'il n'a pas été prononcé tel quel), ou null si rien de pertinent à part la catégorie,
   "is_correction": true seulement si la phrase exprime explicitement une intention de corriger une transaction déjà enregistrée (ex: "corrige", "en fait c'était plutôt", "change le montant de..."), false dans tous les autres cas, y compris si la phrase ressemble à une dépense déjà saisie,
   "is_recurring": true si la phrase indique explicitement qu'il s'agit d'une charge qui se répète chaque mois (mots comme "récurrent", "récurrence", "abonnement", "tous les mois", "chaque mois", "mensuel"), false sinon,
+  "transfer_to_account": si la phrase décrit de l'argent que l'utilisateur met de côté ou déplace VERS un de SES PROPRES comptes listés plus bas (ex: "j'ai mis 200 euros sur mon livret A", "j'ai versé 500 euros sur Bricks", "j'ai viré 300 euros vers mon livret"), le nom EXACT de ce compte tel qu'écrit dans la liste ; sinon null,
+  "transfer_from_account": si la phrase décrit de l'argent retiré D'UN de ses propres comptes listés plus bas (ex: "j'ai retiré 100 euros de mon livret A", "j'ai sorti 200 euros de Bricks"), ou précise le compte de départ d'un virement ("depuis mon Crédit Agricole"), le nom EXACT de ce compte ; sinon null,
   "needs_confirmation": true UNIQUEMENT si tu as un doute réel sur l'interprétation (montant approximatif ou peu clair, catégorie devinée sans élément solide, structure de phrase bizarre ou ambiguë, plusieurs lectures possibles) ; false si l'interprétation est claire et directe — ne mets pas true par excès de prudence, seulement en cas de doute véritable
 }
 
@@ -447,7 +453,11 @@ RÈGLES IMPORTANTES :
 - N'essaie JAMAIS de calculer toi-même un montant, une date calendaire ou une période à partir d'une expression relative. Tu ne connais ni le solde de l'utilisateur ni la date du jour. Recopie les expressions telles quelles ; un système déterministe s'occupe de tous les calculs à partir des vraies données.
 - Si la phrase ne mentionne aucune date (transaction) ou aucune période (question), le champ correspondant doit être null.
 - is_correction doit rester false par défaut : en cas de doute, considère qu'il s'agit d'une nouvelle transaction plutôt que d'une correction.
-- is_recurring doit rester false par défaut : ne le mets à true que si la récurrence est clairement exprimée à l'oral, jamais par déduction (ex: "le loyer" seul ne suffit pas, il faut un mot indiquant explicitement la répétition)."""
+- is_recurring doit rester false par défaut : ne le mets à true que si la récurrence est clairement exprimée à l'oral, jamais par déduction (ex: "le loyer" seul ne suffit pas, il faut un mot indiquant explicitement la répétition).
+- Un virement entre deux comptes de l'utilisateur (épargne mise sur son livret, versement sur son placement, retrait de son livret) n'est ni une dépense ni un revenu : renseigne transfer_to_account et/ou transfer_from_account. Payer quelqu'un d'autre ou un commerce n'est JAMAIS un virement entre ses comptes : dans ce cas les deux champs restent null.
+- Une mensualité de prêt ou de crédit (immobilier, étudiant, auto...) va dans la catégorie "credit".
+
+COMPTES DE L'UTILISATEUR : __ACCOUNTS__"""
 
 
 def _fetch_custom_categories(client, user_id: str) -> dict[str, dict[str, str]]:
@@ -472,17 +482,32 @@ def _fetch_custom_categories(client, user_id: str) -> dict[str, dict[str, str]]:
     return result
 
 
-def _build_voice_system_prompt(expense_categories: set[str], income_categories: set[str]) -> str:
+def _build_voice_system_prompt(
+    expense_categories: set[str], income_categories: set[str], account_names: list[str] | None = None
+) -> str:
     all_categories = sorted(expense_categories | income_categories)
+    accounts_text = (
+        ", ".join(f'"{name}"' for name in account_names)
+        if account_names
+        else "aucun compte enregistré (laisse toujours transfer_to_account et transfer_from_account à null)"
+    )
     return (
         _VOICE_SYSTEM_PROMPT_TEMPLATE
         .replace("__EXPENSE_CATEGORIES__", ", ".join(sorted(expense_categories)))
         .replace("__INCOME_CATEGORIES__", ", ".join(sorted(income_categories)))
         .replace("__ALL_CATEGORIES__", ", ".join(all_categories))
+        .replace("__ACCOUNTS__", accounts_text)
     )
 
 
-def call_claude_extraction(text: str, expense_categories: set[str], income_categories: set[str]) -> dict:
+def _account_key(name: str) -> str:
+    plain = "".join(c for c in unicodedata.normalize("NFD", name) if unicodedata.category(c) != "Mn")
+    return re.sub(r"\s+", " ", plain).strip().lower()
+
+
+def call_claude_extraction(
+    text: str, expense_categories: set[str], income_categories: set[str], account_names: list[str] | None = None
+) -> dict:
     if not ANTHROPIC_API_KEY:
         raise HTTPException(
             status_code=500,
@@ -495,7 +520,7 @@ def call_claude_extraction(text: str, expense_categories: set[str], income_categ
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=400,
-            system=_build_voice_system_prompt(expense_categories, income_categories),
+            system=_build_voice_system_prompt(expense_categories, income_categories, account_names),
             messages=[{"role": "user", "content": text}],
         )
     except Exception as exc:  # noqa: BLE001
@@ -528,7 +553,43 @@ _VOICE_QUESTION_METRICS = {
 }
 
 
-def _finalize_transaction(data: dict, expense_categories: set[str], income_categories: set[str]) -> VoiceParseResult:
+def _resolve_voice_transfer(data: dict, accounts: list[dict]) -> tuple[dict | None, dict | None]:
+    """(compte de départ, compte d'arrivée) d'un virement dicté, ou
+    (None, None) si la phrase n'est pas un virement entre comptes de
+    l'utilisateur. Les noms donnés par l'IA sont comparés aux comptes actifs
+    (accents, casse et espaces ignorés) ; après une bannière de
+    confirmation, les identifiants déjà résolus sont repris tels quels."""
+    active = [acc for acc in accounts if acc.get("active", True)]
+    by_name = {_account_key(acc["name"]): acc for acc in active}
+    by_id = {acc["id"]: acc for acc in active}
+
+    def lookup(name):
+        return by_name.get(_account_key(name)) if isinstance(name, str) and name.strip() else None
+
+    to_acc = lookup(data.get("transfer_to_account"))
+    from_acc = lookup(data.get("transfer_from_account"))
+    if not to_acc and not from_acc and data.get("is_transfer"):
+        own = by_id.get(data.get("account_id"))
+        other = by_id.get(data.get("transfer_account_id"))
+        if other:
+            from_acc, to_acc = (other, own) if data.get("type") == "income" else (own, other)
+    if to_acc and from_acc and to_acc["id"] == from_acc["id"]:
+        return None, None
+    if not to_acc and not from_acc:
+        return None, None
+    # Côté non précisé : le compte courant, s'il n'y en a qu'un.
+    banks = [acc for acc in active if acc.get("kind") == "bank"]
+    default_bank = banks[0] if len(banks) == 1 else None
+    if to_acc and not from_acc and default_bank and default_bank["id"] != to_acc["id"]:
+        from_acc = default_bank
+    if from_acc and not to_acc and default_bank and default_bank["id"] != from_acc["id"]:
+        to_acc = default_bank
+    return from_acc, to_acc
+
+
+def _finalize_transaction(
+    data: dict, expense_categories: set[str], income_categories: set[str], accounts: list[dict] | None = None
+) -> VoiceParseResult:
     """Valide et finalise un objet "transaction" (venant soit directement de
     l'IA, soit d'une correction après une bannière de confirmation) en un
     VoiceParseResult prêt à être renvoyé au frontend — qui se charge ensuite
@@ -562,6 +623,27 @@ def _finalize_transaction(data: dict, expense_categories: set[str], income_categ
     is_correction = bool(data.get("is_correction", False))
     is_recurring = bool(data.get("is_recurring", False))
 
+    transfer = {}
+    from_acc, to_acc = _resolve_voice_transfer(data, accounts or [])
+    if from_acc or to_acc:
+        # Virement entre comptes de l'utilisateur : ni dépense ni revenu.
+        # Sens de l'argent porté par (type, account_id, transfer_account_id),
+        # comme pour un virement saisi à la main ou importé.
+        if to_acc:
+            tx_type = "expense"
+            own, other = from_acc, to_acc
+        else:
+            tx_type = "income"
+            own, other = None, from_acc
+        category = TRANSFER_CATEGORY
+        is_recurring = False  # un virement est enregistré une fois, pas en charge récurrente
+        transfer = {
+            "is_transfer": True,
+            "account_id": own["id"] if own else None,
+            "transfer_account_id": other["id"],
+            "transfer_label": f"{from_acc['name'] if from_acc else '?'} → {to_acc['name'] if to_acc else '?'}",
+        }
+
     return VoiceParseResult(
         type=tx_type,
         amount=amount,
@@ -572,6 +654,7 @@ def _finalize_transaction(data: dict, expense_categories: set[str], income_categ
         is_recurring=is_recurring,
         raw_date_expression=raw_date_expression,
         needs_confirmation=bool(data.get("needs_confirmation", False)),
+        **transfer,
     )
 
 
@@ -599,6 +682,7 @@ def _finalize_edit_last(
         client.table("transactions")
         .select("*")
         .eq("user_id", user_id)
+        .is_("transfer_account_id", "null")  # "ma dernière dépense" n'est jamais un virement
         .order("expense_date", desc=True)
         .order("created_at", desc=True)
     )

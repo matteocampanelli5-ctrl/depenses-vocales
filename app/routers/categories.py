@@ -60,6 +60,39 @@ def create_custom_category(item: CustomCategoryIn, user_id: str = Depends(requir
     return result.data[0]
 
 
+@router.delete("/api/custom-categories/{tx_type}/{value}", status_code=204)
+def delete_custom_category(tx_type: str, value: str, user_id: str = Depends(require_user)) -> Response:
+    """Supprime une catégorie personnalisée (ex : "Annuler" juste après sa
+    création automatique). Refusé tant qu'une opération l'utilise encore,
+    pour ne jamais laisser d'opération classée dans une catégorie disparue."""
+    if tx_type not in ("expense", "income"):
+        raise HTTPException(status_code=400, detail="Type invalide")
+    client = get_supabase_client()
+    in_use = (
+        client.table("transactions")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("type", tx_type)
+        .eq("category", value)
+        .limit(1)
+        .execute()
+        .data
+    )
+    if in_use:
+        raise HTTPException(status_code=409, detail="Cette catégorie est encore utilisée par des opérations")
+    result = (
+        client.table("custom_categories")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("type", tx_type)
+        .eq("value", value)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Catégorie introuvable")
+    return Response(status_code=204)
+
+
 @router.get("/api/dismissed-suggestions")
 def list_dismissed_suggestions(user_id: str = Depends(require_user)) -> list[str]:
     client = get_supabase_client()

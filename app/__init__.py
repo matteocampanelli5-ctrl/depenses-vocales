@@ -12,5 +12,7 @@ sont organisés par responsabilité :
   - frontend_assets.py  : frontend embarqué en base64 (régénéré par build.py)
   - voice_nlp.py        : assistant vocal (analyse de dates/périodes, appels
                           Claude, calcul des réponses)
+  - workbook_parsing.py : lecture d'un classeur Excel onglet par onglet
+                          (prêts, historique de patrimoine), sans IA
   - routers/            : un routeur FastAPI par domaine fonctionnel
 """

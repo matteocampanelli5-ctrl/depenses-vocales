@@ -165,9 +165,9 @@ create table if not exists recurring_expenses (
 alter table recurring_expenses enable row level security;
 
 -- Multi-profil : chaque charge récurrente appartient à un compte. Colonne
--- nullable pour l'instant (voir /api/admin/claim-orphan-data, qui rattache
--- les lignes existantes — créées avant le multi-profil — au premier compte
--- admin une fois qu'il s'inscrit).
+-- nullable : les lignes créées avant le multi-profil ont été rattachées au
+-- premier compte au moment de la migration (une ligne restée à NULL n'est
+-- visible par personne).
 alter table recurring_expenses add column if not exists user_id uuid references app_users(id) on delete cascade;
 create index if not exists recurring_expenses_user_id_idx on recurring_expenses (user_id);
 
@@ -189,10 +189,6 @@ alter table recurring_expenses add column if not exists essentiality_rated_at ti
 -- d'origine et empêche de créer deux fois la même occurrence pour un même
 -- mois. Pour une transaction saisie à la main ou par la voix, ces deux
 -- colonnes restent NULL.
--- `receipt_path` : chemin du fichier dans le bucket Storage "receipts" (en
--- pratique, juste l'id de la transaction) ; NULL si aucune photo de reçu
--- n'est attachée. `receipt_content_type` garde le type MIME d'origine
--- (image/jpeg, image/png...) pour resservir l'image avec le bon en-tête.
 create table if not exists transactions (
   id uuid primary key default gen_random_uuid(),
   type text not null default 'expense' check (type in ('expense', 'income')),
@@ -202,8 +198,6 @@ create table if not exists transactions (
   expense_date date not null,
   recurring_expense_id uuid references recurring_expenses(id) on delete set null,
   occurrence_month date,
-  receipt_path text,
-  receipt_content_type text,
   created_at timestamptz not null default now()
 );
 
@@ -322,15 +316,90 @@ create unique index if not exists category_essentiality_ratings_user_category_un
 -- colonne.
 alter table category_essentiality_ratings add column if not exists rating_updated_at timestamptz not null default now();
 
+-- Prêts immobiliers (premier bloc du futur suivi de patrimoine) : un crédit
+-- par bien, avec le capital initial, le taux et la mensualité — le reste
+-- (intérêts, capital restant dû, date de fin) est recalculé à la volée côté
+-- frontend à partir de ces 4 valeurs plus `start_date` (même logique que la
+-- simulation de placement : rien n'est stocké mois par mois ici). `active`
+-- permet de garder un prêt soldé/un bien vendu dans l'historique sans le
+-- faire disparaître.
+create table if not exists property_loans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references app_users(id) on delete cascade,
+  property_name text not null,
+  principal_amount numeric(12, 2) not null check (principal_amount > 0),
+  annual_rate_pct numeric(6, 3) not null check (annual_rate_pct >= 0),
+  monthly_payment numeric(10, 2) not null check (monthly_payment > 0),
+  start_date date not null,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+alter table property_loans enable row level security;
+create index if not exists property_loans_user_id_idx on property_loans (user_id);
+
 -- Ancienne table d'anti-brute-force mono-utilisateur, remplacée par
 -- login_attempts (ci-dessus), qui suit chaque compte séparément.
 drop table if exists login_rate_limit;
 
--- Bucket de stockage pour les photos de reçus, privé (public = false) :
--- comme pour les tables, aucune policy pour anon/public n'est créée, donc
--- seul le backend (clé service_role, qui contourne toujours le RLS/Storage)
--- peut y lire ou écrire. "on conflict do nothing" pour pouvoir relancer ce
--- script sans erreur si le bucket existe déjà.
-insert into storage.buckets (id, name, public)
-values ('receipts', 'receipts', false)
-on conflict (id) do nothing;
+-- ===========================================================================
+-- Suivi financier (octobre 2026) : loyer des prêts, comptes, soldes relevés,
+-- historique de patrimoine, compte de chaque opération et virements.
+-- (Identique à supabase/migration_2026_10_suivi_financier.sql.)
+-- ===========================================================================
+-- 1. Prêts ------------------------------------------------------------------
+alter table property_loans add column if not exists monthly_rent numeric(10, 2) check (monthly_rent >= 0);
+
+-- 2. Comptes et soldes relevés ----------------------------------------------
+-- kind : bank (compte courant), savings (livret), investment (Bricks, PEA,
+-- assurance-vie...), other.
+create table if not exists accounts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references app_users(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 60),
+  kind text not null default 'bank' check (kind in ('bank', 'savings', 'investment', 'other')),
+  annual_rate_pct numeric(6, 3) check (annual_rate_pct >= 0 and annual_rate_pct <= 100),
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table accounts enable row level security;
+create index if not exists accounts_user_id_idx on accounts (user_id);
+
+create table if not exists account_balances (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references app_users(id) on delete cascade,
+  account_id uuid not null references accounts(id) on delete cascade,
+  balance_date date not null,
+  balance numeric(14, 2) not null,
+  created_at timestamptz not null default now()
+);
+alter table account_balances enable row level security;
+create index if not exists account_balances_user_id_idx on account_balances (user_id);
+create index if not exists account_balances_account_id_idx on account_balances (account_id);
+
+-- 3. Historique de patrimoine déclaré -----------------------------------------
+create table if not exists net_worth_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references app_users(id) on delete cascade,
+  snapshot_date date not null,
+  assets numeric(14, 2) not null check (assets >= 0),
+  debts numeric(14, 2) not null check (debts >= 0),
+  label text,
+  created_at timestamptz not null default now()
+);
+alter table net_worth_snapshots enable row level security;
+create index if not exists net_worth_snapshots_user_id_idx on net_worth_snapshots (user_id);
+
+-- 4. Compte de chaque opération + virements entre comptes ------------------
+-- Supprimer un compte ne supprime pas ses opérations : leur compte repasse
+-- simplement à vide (on delete set null).
+alter table transactions add column if not exists account_id uuid references accounts(id) on delete set null;
+alter table transactions add column if not exists transfer_account_id uuid references accounts(id) on delete set null;
+create index if not exists transactions_account_id_idx on transactions (account_id);
+create index if not exists transactions_transfer_account_id_idx on transactions (transfer_account_id);
+
+-- 5. Mensualités rattachées à un prêt -----------------------------------------
+-- Une dépense de catégorie "Crédit / prêt" peut pointer vers le prêt qu'elle
+-- rembourse (onglet Prêts). Supprimer le prêt ne supprime pas l'opération.
+alter table transactions add column if not exists loan_id uuid references property_loans(id) on delete set null;
+create index if not exists transactions_loan_id_idx on transactions (loan_id);

@@ -69,8 +69,7 @@ def signup(req: SignupRequest) -> dict:
 
     # Le tout premier compte créé (base vierge, avant toute invitation) devient
     # automatiquement administrateur : lui seul pourra ensuite générer des
-    # invitations pour les suivants, et réclamer les données créées avant le
-    # multi-profil (voir /api/admin/claim-orphan-data, plus bas).
+    # invitations pour les suivants (voir /api/auth/invite, plus bas).
     is_first_account = not client.table("app_users").select("id").limit(1).execute().data
 
     user = client.table("app_users").insert({

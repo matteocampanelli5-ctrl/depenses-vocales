@@ -23,6 +23,18 @@ from app.voice_nlp import (
 router = APIRouter()
 
 
+def _user_accounts(client, user_id: str) -> list[dict]:
+    """Comptes de l'utilisateur, pour reconnaître un virement dicté ("j'ai
+    mis 200 € sur mon Livret A")."""
+    return (
+        client.table("accounts")
+        .select("id, name, kind, active")
+        .eq("user_id", user_id)
+        .execute()
+        .data
+    )
+
+
 @router.post("/api/voice/parse", response_model=None)
 def parse_voice_text(req: VoiceParseRequest, user_id: str = Depends(require_user)):
     client = get_supabase_client()
@@ -30,7 +42,9 @@ def parse_voice_text(req: VoiceParseRequest, user_id: str = Depends(require_user
     expense_categories = EXPENSE_CATEGORIES | set(custom["expense"].keys())
     income_categories = INCOME_CATEGORIES | set(custom["income"].keys())
 
-    data = call_claude_extraction(req.text, expense_categories, income_categories)
+    accounts = _user_accounts(client, user_id)
+    account_names = [acc["name"] for acc in accounts if acc.get("active", True)]
+    data = call_claude_extraction(req.text, expense_categories, income_categories, account_names)
 
     if data.get("intent") == "question":
         metric = str(data.get("metric") or "").strip()
@@ -84,7 +98,7 @@ def parse_voice_text(req: VoiceParseRequest, user_id: str = Depends(require_user
             return _preview_edit_last(data)
         return _finalize_edit_last(data, client, expense_categories, income_categories, custom, user_id)
 
-    return _finalize_transaction(data, expense_categories, income_categories)
+    return _finalize_transaction(data, expense_categories, income_categories, accounts)
 
 
 @router.post("/api/voice/confirm", response_model=None)
@@ -104,7 +118,9 @@ def confirm_voice_action(req: VoiceConfirmRequest, user_id: str = Depends(requir
             raise HTTPException(status_code=422, detail="reply_text requis en l'absence de decision")
         decision_data = call_claude_confirm(req.reply_text, req.pending, expense_categories, income_categories)
         decision = decision_data.get("decision")
-        updated = decision_data.get("updated") or req.pending
+        # Les champs que l'IA ne renvoie pas (ex : comptes d'un virement déjà
+        # résolus) sont repris de la version en attente.
+        updated = {**req.pending, **(decision_data.get("updated") or {})}
 
     if decision == "cancel":
         return {"decision": "cancel"}
@@ -117,4 +133,4 @@ def confirm_voice_action(req: VoiceConfirmRequest, user_id: str = Depends(requir
 
     if req.kind == "edit_last":
         return _finalize_edit_last(updated, client, expense_categories, income_categories, custom, user_id)
-    return _finalize_transaction(updated, expense_categories, income_categories)
+    return _finalize_transaction(updated, expense_categories, income_categories, _user_accounts(client, user_id))

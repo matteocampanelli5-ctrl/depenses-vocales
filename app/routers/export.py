@@ -16,10 +16,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Sauvegarde complète (JSON brut de toutes les tables) — Supabase ne fait pas
 # de sauvegarde automatique en offre gratuite ; ce fichier est le filet de
-# sécurité en cas de suppression accidentelle ou de pépin côté Supabase. Ne
-# couvre pas les photos de reçus elles-mêmes (binaires), seulement les
-# chemins qui y pointent (receipt_path) — les fichiers restent dans le bucket
-# Storage, qui a sa propre durabilité côté Supabase.
+# sécurité en cas de suppression accidentelle ou de pépin côté Supabase.
 # ---------------------------------------------------------------------------
 @router.get("/api/export/json")
 def export_json(user_id: str = Depends(require_user)) -> Response:
@@ -70,6 +67,18 @@ def export_xlsx(user_id: str = Depends(require_user)) -> Response:
         .eq("user_id", user_id)
         .execute()
     ).data
+    accounts = (
+        client.table("accounts")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at")
+        .execute()
+    ).data
+    account_names = {acc["id"]: acc["name"] for acc in accounts}
+    # Les virements entre comptes de l'utilisateur ne sont ni des dépenses ni
+    # des revenus : ils ont leur propre onglet et sont exclus des totaux.
+    transfers = [tx for tx in transactions if tx.get("transfer_account_id")]
+    transactions = [tx for tx in transactions if not tx.get("transfer_account_id")]
 
     # Import différé : openpyxl n'est utile que pour cette seule route, pas
     # besoin de l'importer (et de ralentir le démarrage de la fonction) pour
@@ -237,9 +246,9 @@ def export_xlsx(user_id: str = Depends(require_user)) -> Response:
     income_txs = [tx for tx in transactions if tx["type"] == "income"]
 
     def write_tx_block(title: str, start_col: int, rows: list[dict], color: str) -> None:
-        col_letters = [chr(ord("A") + start_col - 1 + i) for i in range(4)]
+        col_letters = [chr(ord("A") + start_col - 1 + i) for i in range(5)]
         ws_tx.cell(row=1, column=start_col, value=title).font = Font(bold=True, color=COLOR_ACCENT)
-        headers = ["Date", "Catégorie", "Montant (€)", "Description"]
+        headers = ["Date", "Catégorie", "Montant (€)", "Compte", "Description"]
         for i, header in enumerate(headers):
             cell = ws_tx.cell(row=2, column=start_col + i, value=header)
             cell.font = Font(bold=True)
@@ -249,12 +258,51 @@ def export_xlsx(user_id: str = Depends(require_user)) -> Response:
             ws_tx.cell(row=row, column=start_col, value=tx["expense_date"])
             ws_tx.cell(row=row, column=start_col + 1, value=category_label(tx["category"], tx["type"]))
             ws_tx.cell(row=row, column=start_col + 2, value=float(tx["amount"])).font = Font(color=color)
-            ws_tx.cell(row=row, column=start_col + 3, value=tx.get("description") or "")
-        for col_letter, width in zip(col_letters, [12, 14, 12, 42]):
+            ws_tx.cell(row=row, column=start_col + 3, value=account_names.get(tx.get("account_id"), ""))
+            ws_tx.cell(row=row, column=start_col + 4, value=tx.get("description") or "")
+        for col_letter, width in zip(col_letters, [12, 14, 12, 18, 42]):
             ws_tx.column_dimensions[col_letter].width = width
 
-    write_tx_block("Dépenses", 1, expense_txs, COLOR_EXPENSE)  # colonnes A-D
-    write_tx_block("Revenus", 6, income_txs, COLOR_INCOME)  # colonnes F-I (E = séparateur)
+    write_tx_block("Dépenses", 1, expense_txs, COLOR_EXPENSE)  # colonnes A-E
+    write_tx_block("Revenus", 7, income_txs, COLOR_INCOME)  # colonnes G-K (F = séparateur)
+
+    # --- Virements entre comptes et liste des comptes ---
+    if transfers:
+        ws_transfers = wb.create_sheet("Virements")
+        ws_transfers.append(["Date", "De", "Vers", "Montant (€)", "Description"])
+        for cell in ws_transfers[1]:
+            cell.font = Font(bold=True)
+            cell.fill = HEADER_FILL
+        for tx in transfers:
+            own = account_names.get(tx.get("account_id"), "")
+            other = account_names.get(tx.get("transfer_account_id"), "")
+            source, target = (own, other) if tx["type"] == "expense" else (other, own)
+            ws_transfers.append([tx["expense_date"], source, target, float(tx["amount"]), tx.get("description") or ""])
+        for col_letter, width in zip("ABCDE", [12, 20, 20, 12, 42]):
+            ws_transfers.column_dimensions[col_letter].width = width
+
+    if accounts:
+        kind_labels = {
+            "bank": "Compte courant",
+            "savings": "Livret / épargne",
+            "investment": "Placement",
+            "other": "Autre",
+        }
+        ws_accounts = wb.create_sheet("Comptes")
+        ws_accounts.append(["Nom", "Type", "Taux annuel (%)", "Actif"])
+        for cell in ws_accounts[1]:
+            cell.font = Font(bold=True)
+            cell.fill = HEADER_FILL
+        for acc in accounts:
+            rate = acc.get("annual_rate_pct")
+            ws_accounts.append([
+                acc["name"],
+                kind_labels.get(acc.get("kind"), acc.get("kind") or ""),
+                float(rate) if rate is not None else "",
+                "Oui" if acc.get("active", True) else "Non",
+            ])
+        for col_letter, width in zip("ABCD", [24, 18, 16, 8]):
+            ws_accounts.column_dimensions[col_letter].width = width
 
     ws_rec = wb.create_sheet("Récurrentes")
     ws_rec.append([

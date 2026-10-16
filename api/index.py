@@ -15,6 +15,7 @@ module pour le détail, et build.py pour la génération.
 from fastapi import FastAPI, Request
 
 from app.routers import (
+    accounts,
     admin,
     auth,
     budgets,
@@ -67,7 +68,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+        "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob:; "
         "connect-src 'self'; "
@@ -97,5 +98,6 @@ app.include_router(categories.router)
 app.include_router(budgets.router)
 app.include_router(savings.router)
 app.include_router(loans.router)
+app.include_router(accounts.router)
 app.include_router(export.router)
 app.include_router(imports.router)

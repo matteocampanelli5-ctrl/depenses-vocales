@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Kaching">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" onerror="console.error('Chart.js : échec du premier chargement depuis le CDN.')"></script>
+<script src="/chart.umd.min.js" onerror="console.error('Chart.js : échec de chargement.')"></script>
 <style>
   :root {
     color-scheme: dark;
@@ -202,6 +202,9 @@
     border: 1px solid var(--accent-dim);
   }
   .category-suggestion.hidden { display: none; }
+  /* Règle générique : tout élément portant la classe "hidden" est masqué
+     (formulaire d'opération, sections d'import, comptes...). */
+  .hidden { display: none !important; }
   .category-suggestion p { margin: 0 0 0.7rem; font-size: 0.88rem; color: var(--text); }
   .category-suggestion-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .category-suggestion-controls select,
@@ -253,7 +256,7 @@
   .tx-card.expense { border-left-color: var(--danger); }
 
   .tx-main { flex: 1; min-width: 0; }
-  .tx-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.15rem; }
+  .tx-top { display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem 0.5rem; margin-bottom: 0.15rem; }
   .category-badge {
     font-size: 0.7rem;
     padding: 0.15rem 0.5rem;
@@ -262,17 +265,9 @@
     color: var(--text-dim);
     white-space: nowrap;
   }
-  .tx-date { font-size: 0.75rem; color: var(--text-dim); }
+  .tx-date { font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
+  .tx-card.transfer .tx-description { white-space: normal; font-size: 0.88rem; }
   .tx-recurring-badge { font-size: 0.75rem; opacity: 0.7; cursor: help; }
-  .tx-receipt-badge {
-    font-size: 0.75rem;
-    opacity: 0.85;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    line-height: 1;
-  }
   .tx-description {
     font-size: 0.95rem;
     overflow: hidden;
@@ -335,6 +330,18 @@
     min-width: 140px;
   }
   .chart-wrap { position: relative; height: 240px; }
+  .period-toggle { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+  .period-btn {
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .period-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .period-subtitle { font-size: 0.85rem; font-weight: 600; margin: 1rem 0 0.5rem; color: var(--text); }
   .dashboard-empty {
     color: var(--text-dim);
     font-size: 0.85rem;
@@ -449,6 +456,35 @@
   }
   .import-dropzone.drag-over { border-color: var(--accent); background: rgba(59, 130, 246, 0.08); }
   .import-dropzone-hint { margin: 0.4rem 0 0; font-size: 0.75rem; color: var(--text-dim); text-align: center; }
+  .import-account-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.6rem 0; flex-wrap: wrap; }
+  .import-account-row label { font-size: 0.85rem; color: var(--text-dim); margin: 0; }
+  .import-account-row select { flex: 1; min-width: 10rem; }
+  .sheet-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-2);
+    margin-bottom: 0.5rem;
+  }
+  .sheet-row.ignored { opacity: 0.55; }
+  .sheet-row-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .sheet-row-name { font-weight: 600; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; }
+  .sheet-row-head select { width: auto; max-width: 48%; flex: none; font-size: 0.8rem; }
+  .sheet-row-name { flex: 1; min-width: 0; }
+  .sheet-hidden-badge {
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    margin-left: 0.35rem;
+  }
+  .sheet-row-detail { font-size: 0.78rem; color: var(--text-dim); line-height: 1.4; }
+  .sheet-row-note { font-size: 0.75rem; color: var(--warning, #f59e0b); }
   .import-summary {
     margin: 0.9rem 0;
     padding: 0.7rem 0.9rem;
@@ -475,6 +511,8 @@
   .import-row-meta { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.1rem; }
   .import-row-dup { color: var(--danger); }
   .import-row select { font-size: 0.8rem; max-width: 130px; }
+  .import-row input[type="checkbox"] { width: auto; flex: none; margin: 0; }
+  .import-row-transfer { color: var(--accent); }
   .import-actions-row {
     display: flex;
     justify-content: space-between;
@@ -535,6 +573,73 @@
   .help-section.visible { display: block; }
   .loans-section { display: none; }
   .loans-section.visible { display: block; }
+  .wealth-section { display: none; }
+  .wealth-section.visible { display: block; }
+
+  /* Comptes et virements */
+  .tx-account-chip {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 9rem;
+  }
+  .tx-card.transfer { border-left: 3px solid var(--accent); }
+  .tx-amount.transfer { color: var(--accent); }
+  .transfer-row { display: flex; gap: 0.6rem; }
+  .transfer-row > div { flex: 1; min-width: 0; }
+
+  /* Patrimoine : comptes, livrets, placements */
+  .wealth-group-title {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    margin: 1.1rem 0 0.5rem;
+  }
+  .account-card {
+    background: var(--surface-2);
+    border-radius: 12px;
+    border-left: 3px solid var(--accent);
+    padding: 0.9rem 1rem;
+    margin-bottom: 0.7rem;
+  }
+  .account-card.kind-savings { border-left-color: var(--success); }
+  .account-card.kind-investment { border-left-color: #a855f7; }
+  .account-card.kind-other { border-left-color: var(--text-dim); }
+  .account-card.closed { opacity: 0.6; }
+  .account-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+  .account-card-name { font-weight: 600; font-size: 0.98rem; }
+  .account-card-kind { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.1rem; }
+  .account-card-balance { font-size: 1.25rem; font-weight: 600; margin: 0.45rem 0 0.15rem; }
+  .account-card-balance.unknown { font-size: 0.95rem; font-weight: 500; color: var(--text-dim); }
+  .account-card-status { font-size: 0.78rem; color: var(--text-dim); }
+  .account-card-actions-row { display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap; }
+  .account-card .account-card-actions-row button.secondary {
+    flex: none;
+    width: auto;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.82rem;
+    background: transparent;
+    border: 1px solid var(--border);
+  }
+  .account-detail { display: none; margin-top: 0.8rem; }
+  .account-detail.visible { display: block; }
+  .account-detail .chart-wrap { height: 200px; }
+  .account-projection { font-size: 0.85rem; margin: 0.6rem 0; color: var(--text-dim); }
+  .account-projection strong { color: var(--success); }
+  .mini-list { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.5rem; font-size: 0.82rem; }
+  .mini-list-row { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+  .mini-list-row .icon-btn { width: 30px; height: 30px; font-size: 0.8rem; }
+  .networth-form { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
+  .networth-form input { flex: 1 1 8rem; min-width: 0; }
+  .networth-form button { flex: none; width: auto; }
+  .checkbox-row label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+  .checkbox-row input[type="checkbox"] { width: auto; }
 
   /* Prêts immobiliers */
   .loans-totals {
@@ -552,6 +657,8 @@
   }
   .loans-totals .stat-card .label { font-size: 0.75rem; color: var(--text-dim); margin: 0 0 0.2rem; }
   .loans-totals .stat-card .value { font-size: 1.1rem; font-weight: 600; margin: 0; }
+  .loans-totals .stat-card .value.positive { color: var(--success); }
+  .loans-totals .stat-card .value.negative { color: var(--danger); }
   .loan-card {
     background: var(--surface-2);
     border-radius: 12px;
@@ -749,6 +856,7 @@
   .compare-selects span { color: var(--text-dim); font-size: 0.85rem; }
 
   .simple-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  #period-table-wrap, #compare-table-wrap, #trend-table-wrap { overflow-x: auto; }
   .simple-table th, .simple-table td { padding: 0.5rem 0.6rem; text-align: right; }
   .simple-table th:first-child, .simple-table td:first-child { text-align: left; }
   .simple-table thead th { color: var(--text-dim); font-weight: 500; border-bottom: 1px solid var(--border); }
@@ -979,53 +1087,12 @@
   }
   .type-btn.active[data-type="expense"] { background: rgba(239, 68, 68, 0.15); border-color: var(--danger); color: var(--danger); }
   .type-btn.active[data-type="income"] { background: rgba(34, 197, 94, 0.15); border-color: var(--success); color: var(--success); }
+  .type-btn.active[data-type="transfer"] { background: rgba(59, 130, 246, 0.15); border-color: var(--accent); color: var(--accent); }
 
   .modal-actions { display: flex; gap: 0.6rem; margin-top: 0.5rem; }
   .confirm-modal { max-width: 400px; }
   .confirm-modal-message { color: var(--text); font-size: 0.95rem; margin: 0; line-height: 1.4; }
 
-  .hidden-file-input { display: none; }
-  .receipt-preview-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    align-items: flex-start;
-    margin-bottom: 0.5rem;
-  }
-  .receipt-preview-img {
-    max-width: 100%;
-    max-height: 160px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    object-fit: contain;
-    background: var(--surface-2);
-  }
-
-  .lightbox-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.85);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 20;
-    padding: 1.5rem;
-  }
-  .lightbox-overlay.hidden { display: none; }
-  .lightbox-img { max-width: 100%; max-height: 80vh; border-radius: 10px; }
-  .lightbox-close {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: none;
-    background: var(--surface-2);
-    color: var(--text);
-    font-size: 1.1rem;
-    cursor: pointer;
-  }
   button.primary, button.secondary {
     flex: 1;
     padding: 0.75rem;
@@ -1202,7 +1269,7 @@
   <header>
     <button type="button" class="icon-btn danger" id="logout-btn" title="Se déconnecter" aria-label="Se déconnecter" style="position:absolute; top:1rem; right:1rem;">⏻</button>
     <h1>💰 Kaching</h1>
-    <p class="subtitle">Tes dépenses et revenus, ajoutés ou édités manuellement.</p>
+    <p class="subtitle">Ton suivi financier : dépenses, revenus, placements et prêts.</p>
   </header>
 
   <div class="tabs">
@@ -1211,7 +1278,8 @@
     <button type="button" class="tab-btn" id="tab-recurring" data-view="recurring">Récurrentes</button>
     <button type="button" class="tab-btn" id="tab-export" data-view="export">Export</button>
     <button type="button" class="tab-btn" id="tab-savings" data-view="savings">Épargne</button>
-    <button type="button" class="tab-btn" id="tab-loans" data-view="loans">🏠 Prêts</button>
+    <button type="button" class="tab-btn" id="tab-wealth" data-view="wealth">💼 Patrimoine</button>
+    <button type="button" class="tab-btn" id="tab-loans" data-view="loans">🏦 Prêts</button>
     <button type="button" class="tab-btn" id="tab-help" data-view="help">❓ Aide</button>
   </div>
 
@@ -1244,6 +1312,7 @@
       <div class="filter-bar">
         <input type="text" id="filter-search" placeholder="Rechercher...">
         <select id="filter-category"><option value="">Toutes catégories</option></select>
+        <select id="filter-account"><option value="">Tous les comptes</option></select>
         <input type="date" id="filter-date-start" aria-label="Du">
         <input type="date" id="filter-date-end" aria-label="Au">
       </div>
@@ -1285,6 +1354,33 @@
         </div>
       </div>
 
+      <div class="dashboard-row" id="dash-row-period">
+        <div class="dashboard-head">
+          <h3>Sur les derniers mois</h3>
+          <div class="period-toggle" id="period-toggle">
+            <button type="button" class="period-btn active" data-months="3">3 mois</button>
+            <button type="button" class="period-btn" data-months="6">6 mois</button>
+            <button type="button" class="period-btn" data-months="12">12 mois</button>
+          </div>
+        </div>
+        <p class="recurring-hint" id="period-range-label"></p>
+        <div id="period-content">
+          <div class="loans-totals" id="period-kpis"></div>
+          <p class="period-subtitle">Dépenses par catégorie sur la période</p>
+          <div class="chart-wrap">
+            <canvas id="chart-period-categories"></canvas>
+          </div>
+          <p class="period-subtitle">Épargne de chaque mois (revenus − dépenses)</p>
+          <div class="chart-wrap">
+            <canvas id="chart-period-savings"></canvas>
+          </div>
+          <p class="period-subtitle">Ce mois-ci comparé à ta moyenne</p>
+          <div id="period-table-wrap"></div>
+        </div>
+        <div id="period-empty" class="dashboard-empty" style="display:none;">
+          Pas encore de mois complet à analyser — reviens le mois prochain, ou importe un relevé.
+        </div>
+      </div>
       <div class="dashboard-row" id="dash-row-budgets">
         <h3>Budgets mensuels par catégorie</h3>
         <p class="recurring-hint">
@@ -1399,24 +1495,42 @@
       <div class="dashboard-row">
         <h3>Importer un relevé bancaire</h3>
         <p class="recurring-hint">
-          Pour n'importe quelle banque, dans n'importe quel format courant
-          (CSV ou Excel), y compris un fichier qui n'a pas une structure
-          classique (ex : un tableau par mois, sans date précise ni
-          catégorie). L'IA lit le fichier et propose des transactions à
-          valider ; les montants, dates et descriptions sont analysés pour
-          cette seule requête (rien n'est conservé après) ; tu choisis ensuite
-          ligne par ligne quoi importer avant toute écriture en base. Si une
-          dépense semble se répéter chaque mois, elle est mise de côté pour
-          que tu confirmes toi-même s'il s'agit d'une charge récurrente ou
-          d'un crédit en cours de remboursement.
+          N'importe quelle banque, en CSV, Excel (.xlsx, .xlsm) ou relevé PDF,
+          y compris un fichier sans structure classique (ex : un tableau par
+          mois, sans date précise ni catégorie). L'IA lit le fichier et
+          propose des opérations à valider ligne par ligne, rien n'est écrit
+          avant ta confirmation et le fichier n'est pas conservé. Dans un
+          CSV ou un Excel, les numéros de compte et IBAN sont masqués avant
+          l'analyse (un relevé PDF, lui, est lu tel quel). Les
+          virements vers tes propres comptes (Livret A, Bricks…) sont
+          reconnus et ne comptent pas comme des dépenses. Pour un Excel à
+          plusieurs onglets (comme un suivi de patrimoine), tu choisis
+          d'abord ce que contient chaque onglet : opérations du mois, prêt,
+          ou historique d'endettement.
         </p>
+        <div class="import-account-row">
+          <label for="generic-import-account">Ce relevé vient de</label>
+          <select id="generic-import-account"><option value="">Non précisé</option></select>
+        </div>
         <div class="import-dropzone" id="generic-import-dropzone">
           <div class="import-file-row">
-            <input type="file" id="generic-import-file-input" accept=".csv,.xlsx,text/csv">
+            <input type="file" id="generic-import-file-input" accept=".csv,.xlsx,.xlsm,.pdf,text/csv,application/pdf">
             <button class="primary" id="generic-import-analyze-btn">Analyser</button>
           </div>
-          <p class="import-dropzone-hint">ou glisse-dépose un fichier .csv / .xlsx ici</p>
+          <p class="import-dropzone-hint">ou glisse-dépose un fichier .csv / .xlsx / .xlsm / .pdf ici</p>
         </div>
+        <div id="workbook-sheets-section" class="hidden">
+          <h4 style="margin-bottom:0.25rem;">Onglets du classeur</h4>
+          <p class="recurring-hint">
+            Vérifie ce que contient chaque onglet. Les prêts et l'historique
+            d'endettement sont lus directement ; les onglets d'opérations
+            sont lus par l'IA à l'étape suivante.
+          </p>
+          <div id="workbook-sheets-list"></div>
+          <button class="primary" id="workbook-continue-btn" style="width:100%; margin-top:0.5rem;">Continuer</button>
+        </div>
+        <div id="workbook-structured-summary" class="import-summary" style="display:none;"></div>
+        <button class="primary hidden" id="workbook-commit-btn" style="width:100%; margin-top:0.5rem;">Importer</button>
         <div id="generic-import-summary" class="import-summary" style="display:none;"></div>
         <div id="generic-import-recurring-section" class="hidden">
           <h4 style="margin-bottom:0.25rem;">Dépenses qui semblent se répéter</h4>
@@ -1437,7 +1551,7 @@
         <p class="recurring-hint">
           Supprime définitivement TOUTES les données : transactions, charges
           récurrentes, catégories personnalisées, suggestions ignorées,
-          budgets, photos de reçus et objectif d'épargne. Pense à exporter en
+          budgets, objectif d'épargne, comptes, soldes et prêts. Pense à exporter en
           Excel avant si besoin — impossible à annuler.
         </p>
         <button class="danger" id="btn-reset-all" style="width:100%;">Réinitialiser toute l'application</button>
@@ -1486,8 +1600,12 @@
           titre informatif — les performances passées ne garantissent pas les
           performances futures, ce n'est pas un conseil financier.
         </p>
+        <div class="import-account-row" id="placement-from-account-row">
+          <label for="placement-from-account">Partir d'un de mes comptes</label>
+          <select id="placement-from-account"></select>
+        </div>
         <div class="placement-presets">
-          <button type="button" class="placement-preset-btn" data-rate="3">Livret A (~3%)</button>
+          <button type="button" class="placement-preset-btn" data-rate="1.7" title="Taux en vigueur depuis le 1er août 2026">Livret A (1,7 %)</button>
           <button type="button" class="placement-preset-btn" data-rate="7">Actions / ETF monde (~7%)</button>
         </div>
         <div class="placement-inputs">
@@ -1543,13 +1661,49 @@
       </div>
     </section>
 
+    <section id="view-wealth" class="wealth-section">
+      <div class="loans-totals" id="wealth-totals"></div>
+      <p class="recurring-hint">
+        Tes comptes et tes placements. Le solde d'un livret ou d'un placement
+        est calculé à partir des virements faits vers lui ; tape le vrai solde
+        de temps en temps (bouton « Solde réel ») pour le corriger — les
+        intérêts et les gains apparaissent à ce moment-là. Les prêts (onglet
+        Prêts) sont déduits du patrimoine net.
+      </p>
+      <div id="wealth-accounts"></div>
+      <div id="wealth-empty-state" class="empty-state" style="display:none;">
+        Aucun compte pour l'instant — appuie sur + pour ajouter ta banque, ton
+        Livret A, Bricks…
+      </div>
+      <div class="dashboard-row" id="networth-row">
+        <h3>Historique du patrimoine</h3>
+        <p class="recurring-hint">
+          Patrimoine total et endettement relevés à une date donnée (par
+          exemple sur Boursorama), importés depuis un Excel ou ajoutés ici.
+        </p>
+        <div class="chart-wrap" id="networth-chart-wrap">
+          <canvas id="chart-networth"></canvas>
+        </div>
+        <div id="networth-empty" class="dashboard-empty" style="display:none;">
+          Aucun relevé pour l'instant.
+        </div>
+        <div class="networth-form">
+          <input type="date" id="networth-date" aria-label="Date du relevé">
+          <input type="number" id="networth-assets" placeholder="Patrimoine (€)" min="0" step="0.01" inputmode="decimal">
+          <input type="number" id="networth-debts" placeholder="Endettement (€)" min="0" step="0.01" inputmode="decimal">
+          <button class="primary" id="networth-add-btn">Ajouter</button>
+        </div>
+        <div id="networth-list"></div>
+      </div>
+    </section>
+
     <section id="view-loans" class="loans-section">
       <p class="recurring-hint">
-        Un prêt par bien immobilier (ou tout autre crédit) : capital emprunté,
-        taux annuel, mensualité et date de départ. Le détail mois par mois
-        (intérêts, capital remboursé, capital restant dû) est recalculé
-        automatiquement à partir de ces 4 valeurs, comme pour la simulation
-        de placement.
+        Tous tes crédits : prêt immobilier, prêt étudiant, crédit auto…
+        Capital emprunté, taux annuel, mensualité et date de la 1ère
+        échéance suffisent : le détail mois par mois (intérêts, capital
+        remboursé, capital restant dû) est recalculé automatiquement. Pour un
+        bien loué, ajoute le loyer perçu pour voir ce qu'il reste chaque mois.
       </p>
       <div class="loans-totals" id="loans-totals"></div>
       <div id="loans-list"></div>
@@ -1583,13 +1737,14 @@
       <div class="type-toggle" id="type-toggle">
         <button type="button" class="type-btn active" data-type="expense">💸 Dépense</button>
         <button type="button" class="type-btn" data-type="income">💰 Revenu</button>
+        <button type="button" class="type-btn" data-type="transfer">🔁 Virement</button>
       </div>
 
       <div>
         <label for="input-amount">Montant (€)</label>
         <input type="number" id="input-amount" step="0.01" min="0.01" placeholder="12.50" inputmode="decimal">
       </div>
-      <div>
+      <div id="tx-category-wrap">
         <label for="input-category">Catégorie</label>
         <select id="input-category"></select>
         <input
@@ -1608,14 +1763,29 @@
         <label for="input-date">Date</label>
         <input type="date" id="input-date">
       </div>
-      <div>
-        <label>Reçu (photo, optionnel)</label>
-        <input type="file" id="input-receipt-file" class="hidden-file-input" accept="image/*" capture="environment">
-        <div id="receipt-preview-wrap" class="receipt-preview-wrap hidden">
-          <img id="receipt-preview-img" class="receipt-preview-img" alt="Reçu">
-          <button type="button" class="secondary" id="btn-receipt-remove">Supprimer la photo</button>
+      <div id="tx-loan-wrap" class="hidden">
+        <label for="input-loan">Prêt remboursé</label>
+        <select id="input-loan"></select>
+      </div>
+      <div id="tx-account-wrap">
+        <label for="input-account">Compte (optionnel)</label>
+        <select id="input-account"></select>
+      </div>
+      <div id="tx-transfer-wrap" class="hidden">
+        <div class="transfer-row">
+          <div>
+            <label for="input-transfer-from">De</label>
+            <select id="input-transfer-from"></select>
+          </div>
+          <div>
+            <label for="input-transfer-to">Vers</label>
+            <select id="input-transfer-to"></select>
+          </div>
         </div>
-        <button type="button" class="secondary" id="btn-receipt-pick" style="width:100%;">📷 Ajouter une photo de reçu</button>
+        <p class="recurring-hint" id="tx-transfer-hint">
+          Un virement entre tes propres comptes (ex : vers ton Livret A) n'est
+          compté ni en dépense ni en revenu.
+        </p>
       </div>
       <div class="modal-actions">
         <button class="secondary" id="btn-cancel">Annuler</button>
@@ -1669,8 +1839,8 @@
       <h2 id="loan-modal-title">Nouveau prêt</h2>
 
       <div>
-        <label for="loan-input-property-name">Nom du bien</label>
-        <input type="text" id="loan-input-property-name" placeholder="Ex : Appartement Carros">
+        <label for="loan-input-property-name">Nom du prêt ou du bien</label>
+        <input type="text" id="loan-input-property-name" maxlength="80" placeholder="Ex : Prêt étudiant, Appartement centre-ville">
       </div>
       <div>
         <label for="loan-input-principal">Capital emprunté (€)</label>
@@ -1688,9 +1858,65 @@
         <label for="loan-input-start-date">Date de la 1ère échéance</label>
         <input type="date" id="loan-input-start-date">
       </div>
+      <div>
+        <label for="loan-input-rent">Loyer mensuel perçu (€, optionnel)</label>
+        <input type="number" id="loan-input-rent" step="0.01" min="0" placeholder="Pour un bien loué" inputmode="decimal">
+      </div>
+      <div id="loan-ended-wrap" class="checkbox-row hidden">
+        <label><input type="checkbox" id="loan-input-ended"> Prêt terminé ou bien vendu (gardé dans l'historique)</label>
+      </div>
       <div class="modal-actions">
         <button class="secondary" id="loan-btn-cancel">Annuler</button>
         <button class="primary" id="loan-btn-save">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="account-modal-overlay">
+    <div class="modal">
+      <h2 id="account-modal-title">Nouveau compte</h2>
+      <div>
+        <label for="account-input-name">Nom</label>
+        <input type="text" id="account-input-name" maxlength="60" placeholder="Ex : Crédit Agricole, Livret A, Bricks">
+      </div>
+      <div>
+        <label for="account-input-kind">Type</label>
+        <select id="account-input-kind">
+          <option value="bank">Compte courant</option>
+          <option value="savings">Livret / épargne (Livret A, LDDS…)</option>
+          <option value="investment">Placement (Bricks, PEA, assurance-vie…)</option>
+          <option value="other">Autre</option>
+        </select>
+      </div>
+      <div>
+        <label for="account-input-rate">Taux annuel attendu (%, optionnel)</label>
+        <input type="number" id="account-input-rate" step="0.01" min="0" max="100" inputmode="decimal" placeholder="Ex : 1.7">
+      </div>
+      <div id="account-closed-wrap" class="checkbox-row hidden">
+        <label><input type="checkbox" id="account-input-closed"> Compte fermé (gardé dans l'historique)</label>
+      </div>
+      <div class="modal-actions">
+        <button class="secondary" id="account-btn-cancel">Annuler</button>
+        <button class="primary" id="account-btn-save">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="balance-modal-overlay">
+    <div class="modal">
+      <h2 id="balance-modal-title">Solde réel</h2>
+      <p class="recurring-hint" id="balance-modal-hint"></p>
+      <div>
+        <label for="balance-input-amount">Solde (€)</label>
+        <input type="number" id="balance-input-amount" step="0.01" inputmode="decimal" placeholder="Ex : 5230.40">
+      </div>
+      <div>
+        <label for="balance-input-date">À la date du</label>
+        <input type="date" id="balance-input-date">
+      </div>
+      <div class="modal-actions">
+        <button class="secondary" id="balance-btn-cancel">Annuler</button>
+        <button class="primary" id="balance-btn-save">Enregistrer</button>
       </div>
     </div>
   </div>
@@ -1706,10 +1932,6 @@
     </div>
   </div>
 
-  <div class="lightbox-overlay hidden" id="receipt-lightbox-overlay">
-    <button type="button" class="lightbox-close" id="receipt-lightbox-close" aria-label="Fermer">✕</button>
-    <img class="lightbox-img" id="receipt-lightbox-img" alt="Reçu en plein écran">
-  </div>
   </div>
 
   <script>
@@ -1999,148 +2221,33 @@
     let editingOriginalCategory = null; // catégorie de la transaction avant édition (pour détecter un changement)
     let currentType = "expense";
 
-    // -------------------------------------------------------------------
-    // Photo de reçu en pièce jointe
-    // -------------------------------------------------------------------
-    const receiptFileInput = document.getElementById("input-receipt-file");
-    const receiptPreviewWrap = document.getElementById("receipt-preview-wrap");
-    const receiptPreviewImg = document.getElementById("receipt-preview-img");
-    const receiptPickBtn = document.getElementById("btn-receipt-pick");
-    const receiptRemoveBtn = document.getElementById("btn-receipt-remove");
-    const receiptLightboxOverlay = document.getElementById("receipt-lightbox-overlay");
-    const receiptLightboxImg = document.getElementById("receipt-lightbox-img");
-    const receiptLightboxCloseBtn = document.getElementById("receipt-lightbox-close");
+    const accountInput = document.getElementById("input-account");
+    const loanInput = document.getElementById("input-loan");
 
-    // Fichier choisi mais pas encore envoyé (uniquement en création, tant que
-    // la transaction n'a pas encore d'id) ; en édition, l'envoi est immédiat.
-    let pendingReceiptFile = null;
-    let receiptPreviewObjectUrl = null;
-    let hasExistingReceipt = false;
-
-    function setReceiptPreviewFromBlob(blob) {
-      if (receiptPreviewObjectUrl) URL.revokeObjectURL(receiptPreviewObjectUrl);
-      receiptPreviewObjectUrl = URL.createObjectURL(blob);
-      receiptPreviewImg.src = receiptPreviewObjectUrl;
-      receiptPreviewWrap.classList.remove("hidden");
-      receiptPickBtn.textContent = "📷 Remplacer la photo";
+    // Champ "Prêt remboursé" : visible pour une dépense classée "Crédit /
+    // prêt" quand au moins un prêt existe. "Automatique" laisse le serveur
+    // retrouver le prêt dont la mensualité correspond au montant.
+    function refreshTxLoanField(selectedLoanId = null) {
+      const wrap = document.getElementById("tx-loan-wrap");
+      const loans = allLoans.filter((loan) => loan.active !== false || loan.id === selectedLoanId);
+      const show = currentType === "expense" && categoryInput.value === LOAN_CATEGORY && loans.length > 0;
+      wrap.classList.toggle("hidden", !show);
+      const previous = selectedLoanId !== null ? selectedLoanId : loanInput.value;
+      loanInput.innerHTML = "";
+      const auto = document.createElement("option");
+      auto.value = "";
+      auto.textContent = "Automatique (selon le montant)";
+      loanInput.appendChild(auto);
+      for (const loan of loans) {
+        const opt = document.createElement("option");
+        opt.value = loan.id;
+        opt.textContent = `${loan.property_name} (${currencyFormatter.format(loan.monthly_payment)}/mois)`;
+        loanInput.appendChild(opt);
+      }
+      loanInput.value = loans.some((loan) => loan.id === previous) ? previous : "";
     }
-
-    function resetReceiptUi() {
-      if (receiptPreviewObjectUrl) {
-        URL.revokeObjectURL(receiptPreviewObjectUrl);
-        receiptPreviewObjectUrl = null;
-      }
-      receiptPreviewImg.src = "";
-      receiptPreviewWrap.classList.add("hidden");
-      receiptPickBtn.textContent = "📷 Ajouter une photo de reçu";
-      receiptFileInput.value = "";
-      pendingReceiptFile = null;
-      hasExistingReceipt = false;
-    }
-
-    async function loadExistingReceiptPreview(transactionId) {
-      try {
-        const res = await fetch(`/api/transactions/${transactionId}/receipt`, {
-          headers: { "X-API-Key": API_KEY },
-        });
-        if (!res.ok) return;
-        const blob = await res.blob();
-        setReceiptPreviewFromBlob(blob);
-        hasExistingReceipt = true;
-      } catch (_) {
-        // Pas grave : l'utilisateur peut juste réessayer d'ouvrir la fiche.
-      }
-    }
-
-    receiptPickBtn.addEventListener("click", () => receiptFileInput.click());
-
-    receiptFileInput.addEventListener("change", async () => {
-      const file = receiptFileInput.files[0];
-      if (!file) return;
-      if (!file.type.startsWith("image/")) {
-        showToast("Choisis une image (JPEG, PNG, WEBP ou HEIC)", true);
-        receiptFileInput.value = "";
-        return;
-      }
-      if (file.size > 8 * 1024 * 1024) {
-        showToast("Image trop lourde (8 Mo maximum)", true);
-        receiptFileInput.value = "";
-        return;
-      }
-
-      setReceiptPreviewFromBlob(file);
-
-      if (editingId) {
-        // Transaction déjà existante : on envoie tout de suite, indépendamment
-        // du bouton "Enregistrer" du formulaire.
-        try {
-          const formData = new FormData();
-          formData.append("file", file);
-          await fetch(`/api/transactions/${editingId}/receipt`, {
-            method: "PUT",
-            headers: { "X-API-Key": API_KEY },
-            body: formData,
-          }).then(async (res) => {
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              throw new Error(extractErrorDetail(data, `Erreur HTTP ${res.status}`));
-            }
-          });
-          hasExistingReceipt = true;
-          showToast("Photo du reçu enregistrée");
-          await loadTransactions();
-        } catch (err) {
-          showToast("Erreur : " + err.message, true);
-        }
-      } else {
-        // Nouvelle transaction pas encore créée : on garde le fichier de côté,
-        // il sera envoyé juste après la création (voir btn-save).
-        pendingReceiptFile = file;
-      }
-    });
-
-    receiptRemoveBtn.addEventListener("click", async () => {
-      if (editingId && hasExistingReceipt) {
-        if (!(await showConfirm("Supprimer la photo de ce reçu ?"))) return;
-        try {
-          await apiFetch(`/api/transactions/${editingId}/receipt`, { method: "DELETE" });
-          resetReceiptUi();
-          showToast("Photo supprimée");
-          await loadTransactions();
-        } catch (err) {
-          showToast("Erreur : " + err.message, true);
-        }
-      } else {
-        resetReceiptUi();
-      }
-    });
-
-    function openReceiptLightbox(transactionId) {
-      fetch(`/api/transactions/${transactionId}/receipt`, { headers: { "X-API-Key": API_KEY } })
-        .then((res) => {
-          if (!res.ok) throw new Error("Impossible de charger la photo");
-          return res.blob();
-        })
-        .then((blob) => {
-          const url = URL.createObjectURL(blob);
-          receiptLightboxImg.src = url;
-          receiptLightboxOverlay.classList.remove("hidden");
-        })
-        .catch((err) => showToast("Erreur : " + err.message, true));
-    }
-
-    function closeReceiptLightbox() {
-      receiptLightboxOverlay.classList.add("hidden");
-      if (receiptLightboxImg.src) {
-        URL.revokeObjectURL(receiptLightboxImg.src);
-        receiptLightboxImg.src = "";
-      }
-    }
-
-    receiptLightboxCloseBtn.addEventListener("click", closeReceiptLightbox);
-    receiptLightboxOverlay.addEventListener("click", (e) => {
-      if (e.target === receiptLightboxOverlay) closeReceiptLightbox();
-    });
+    const transferFromInput = document.getElementById("input-transfer-from");
+    const transferToInput = document.getElementById("input-transfer-to");
 
     const categoriesByType = {
       expense: [
@@ -2150,6 +2257,7 @@
         ["logement", "Logement"],
         ["loisirs", "Loisirs"],
         ["santé", "Santé"],
+        ["credit", "Crédit / prêt"],
         ["autre", "Autre"],
       ],
       income: [
@@ -2164,6 +2272,12 @@
     const allCategoryLabels = Object.fromEntries(
       [...categoriesByType.expense, ...categoriesByType.income]
     );
+    // Catégorie posée automatiquement sur un virement entre deux comptes de
+    // l'utilisateur (jamais proposée dans la liste des catégories).
+    const TRANSFER_CATEGORY = "virement";
+    // Catégorie des mensualités de prêt (rattachables à un prêt de l'onglet Prêts).
+    const LOAN_CATEGORY = "credit";
+    allCategoryLabels[TRANSFER_CATEGORY] = "Virement";
 
     // Catégories créées par l'utilisateur depuis le bandeau de suggestion
     // (voir plus bas), et suggestions ignorées : stockées côté serveur
@@ -2357,6 +2471,38 @@
         document.getElementById("placement-rate").value = btn.dataset.rate;
         renderPlacementSimulation();
       });
+    });
+
+    // La simulation peut partir d'un vrai compte (onglet Patrimoine) : son
+    // solde actuel devient le montant initial, et son taux (s'il est
+    // renseigné) le taux de la simulation.
+    function refreshPlacementAccountSelect() {
+      const select = document.getElementById("placement-from-account");
+      const row = document.getElementById("placement-from-account-row");
+      const previous = select.value;
+      select.innerHTML = "";
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "— Saisie libre —";
+      select.appendChild(empty);
+      const candidates = sortedAccounts().filter((acc) => acc.active !== false && acc.kind !== "bank");
+      for (const acc of candidates) {
+        const opt = document.createElement("option");
+        opt.value = acc.id;
+        opt.textContent = acc.name;
+        select.appendChild(opt);
+      }
+      select.value = candidates.some((acc) => acc.id === previous) ? previous : "";
+      row.classList.toggle("hidden", candidates.length === 0);
+    }
+
+    document.getElementById("placement-from-account").addEventListener("change", (e) => {
+      const acc = accountById(e.target.value);
+      if (!acc) return;
+      const state = computeAccountState(acc);
+      if (state.known) document.getElementById("placement-initial").value = Math.round(state.balance);
+      if (acc.annual_rate_pct != null) document.getElementById("placement-rate").value = Number(acc.annual_rate_pct);
+      renderPlacementSimulation();
     });
 
     // Tant que l'utilisateur n'a pas tapé lui-même dans "versement mensuel",
@@ -2955,6 +3101,7 @@
     }
 
     categoryInput.addEventListener("change", () => {
+      refreshTxLoanField();
       newCategoryNameInput.classList.toggle("hidden", categoryInput.value !== "__new__");
       if (categoryInput.value === "__new__") newCategoryNameInput.focus();
     });
@@ -2964,7 +3111,15 @@
       typeToggleEl.querySelectorAll(".type-btn").forEach((btn) => {
         btn.classList.toggle("active", btn.dataset.type === type);
       });
-      populateCategories(type, categoryInput.value);
+      const isTransfer = type === "transfer";
+      modalTitleEl.textContent = editingId
+        ? (isTransfer ? "Modifier le virement" : "Modifier la transaction")
+        : (isTransfer ? "Nouveau virement" : "Nouvelle transaction");
+      document.getElementById("tx-category-wrap").classList.toggle("hidden", isTransfer);
+      document.getElementById("tx-account-wrap").classList.toggle("hidden", isTransfer);
+      document.getElementById("tx-transfer-wrap").classList.toggle("hidden", !isTransfer);
+      if (!isTransfer) populateCategories(type, categoryInput.value);
+      refreshTxLoanField();
     }
 
     typeToggleEl.addEventListener("click", (e) => {
@@ -2981,16 +3136,20 @@
       editingOriginalCategory = isEdit ? tx.category : null;
       modalTitleEl.textContent = isEdit ? "Modifier la transaction" : "Nouvelle transaction";
       saveBtn.textContent = isEdit ? "Enregistrer" : "Ajouter";
-      setType(tx ? tx.type : "expense");
+      const isTransfer = Boolean(tx && tx.transfer_account_id);
+      fillAccountSelect(accountInput, { emptyLabel: "— Aucun —", selected: tx ? tx.account_id : null });
+      // Un virement est toujours présenté dans le sens de l'argent : "De" le
+      // compte qui se vide, "Vers" celui qui se remplit (pour une ligne
+      // importée côté crédit, account_id est le compte qui reçoit).
+      const [fromId, toId] = isTransfer ? transferDirection(tx) : [null, null];
+      fillAccountSelect(transferFromInput, { emptyLabel: "Choisir…", selected: fromId });
+      fillAccountSelect(transferToInput, { emptyLabel: "Choisir…", selected: toId });
+      setType(isTransfer ? "transfer" : (tx ? tx.type : "expense"));
       amountInput.value = tx ? tx.amount : "";
-      populateCategories(currentType, tx ? tx.category : "autre");
+      if (!isTransfer) populateCategories(currentType, tx ? tx.category : "autre");
+      refreshTxLoanField(tx && tx.loan_id ? tx.loan_id : "");
       descriptionInput.value = tx ? (tx.description || "") : "";
       dateInput.value = tx ? tx.expense_date : todayIso();
-
-      resetReceiptUi();
-      if (isEdit && tx.receipt_path) {
-        loadExistingReceiptPreview(tx.id);
-      }
 
       overlayEl.classList.remove("hidden");
       amountInput.focus();
@@ -3006,12 +3165,12 @@
       overlayEl.classList.add("hidden");
       editingId = null;
       editingOriginalCategory = null;
-      resetReceiptUi();
     }
 
     document.getElementById("fab-add").addEventListener("click", () => {
       if (currentView === "recurring") openRecurringModal();
       else if (currentView === "loans") openLoanModal();
+      else if (currentView === "wealth") openAccountModal();
       else openModal();
     });
     document.getElementById("btn-cancel").addEventListener("click", closeModal);
@@ -3021,6 +3180,49 @@
       const amount = parseFloat(amountInput.value);
       if (!amount || amount <= 0) {
         showToast("Montant invalide", true);
+        return;
+      }
+
+      if (currentType === "transfer") {
+        const fromId = transferFromInput.value;
+        const toId = transferToInput.value;
+        if (allAccounts.length < 2) {
+          showToast("Ajoute d'abord tes comptes dans l'onglet Patrimoine", true);
+          return;
+        }
+        if (!fromId || !toId) {
+          showToast("Choisis le compte de départ et le compte d'arrivée", true);
+          return;
+        }
+        if (fromId === toId) {
+          showToast("Les deux comptes doivent être différents", true);
+          return;
+        }
+        const transferPayload = {
+          type: "expense",
+          amount,
+          category: TRANSFER_CATEGORY,
+          description: descriptionInput.value.trim() || null,
+          expense_date: dateInput.value || null,
+          account_id: fromId,
+          transfer_account_id: toId,
+        };
+        saveBtn.disabled = true;
+        try {
+          if (editingId) {
+            await apiFetch(`/api/transactions/${editingId}`, { method: "PUT", body: JSON.stringify(transferPayload) });
+            showToast("Virement modifié");
+          } else {
+            await apiFetch("/api/transactions", { method: "POST", body: JSON.stringify(transferPayload) });
+            showToast("Virement ajouté");
+          }
+          closeModal();
+          await loadTransactions();
+        } catch (err) {
+          showToast("Erreur : " + err.message, true);
+        } finally {
+          saveBtn.disabled = false;
+        }
         return;
       }
 
@@ -3046,7 +3248,15 @@
         category: categoryValue,
         description: descriptionInput.value.trim() || null,
         expense_date: dateInput.value || null,
+        account_id: accountInput.value || null,
+        // Une opération modifiée ici n'est plus (ou n'a jamais été) un
+        // virement : on retire explicitement le lien éventuel.
+        transfer_account_id: null,
       };
+      if (currentType === "expense" && categoryValue === LOAN_CATEGORY) {
+        payload.loan_id = loanInput.value || null;
+      }
+      const isNewTransaction = !editingId;
 
       saveBtn.disabled = true;
       try {
@@ -3100,24 +3310,14 @@
         } else {
           const created = await apiFetch("/api/transactions", { method: "POST", body: JSON.stringify(payload) });
           showToast(currentType === "income" ? "Revenu ajouté" : "Dépense ajoutée");
-          if (pendingReceiptFile) {
-            // La photo a été choisie avant que la transaction n'existe : on
-            // l'envoie maintenant qu'on a un id.
-            try {
-              const formData = new FormData();
-              formData.append("file", pendingReceiptFile);
-              await fetch(`/api/transactions/${created.id}/receipt`, {
-                method: "PUT",
-                headers: { "X-API-Key": API_KEY },
-                body: formData,
-              });
-            } catch (_) {
-              showToast("Transaction créée, mais l'envoi de la photo a échoué", true);
-            }
-          }
         }
         closeModal();
         await loadTransactions();
+        // Une dépense saisie à la main dans "Autre" compte aussi pour la
+        // création automatique d'une catégorie (même règle qu'à la voix).
+        if (isNewTransaction && payload.category === "autre") {
+          checkCategorySuggestion(payload.description, payload.type);
+        }
       } catch (err) {
         showToast("Erreur : " + err.message, true);
       } finally {
@@ -3159,7 +3359,7 @@
       listEl.innerHTML = "";
       if (transactions.length === 0) {
         emptyStateEl.style.display = "block";
-        emptyStateEl.textContent = allTransactions.length === 0
+        emptyStateEl.textContent = allRows.length === 0
           ? "Rien pour l'instant — appuie sur le bouton + pour ajouter une dépense ou un revenu."
           : "Aucun résultat pour ces filtres.";
       } else {
@@ -3167,8 +3367,9 @@
       }
 
       for (const tx of transactions) {
+        const isTransfer = Boolean(tx.transfer_account_id);
         const card = document.createElement("div");
-        card.className = "tx-card " + tx.type;
+        card.className = "tx-card " + (isTransfer ? "transfer" : tx.type);
 
         const main = document.createElement("div");
         main.className = "tx-main";
@@ -3177,7 +3378,7 @@
         top.className = "tx-top";
         const badge = document.createElement("span");
         badge.className = "category-badge";
-        badge.textContent = allCategoryLabels[tx.category] || tx.category;
+        badge.textContent = isTransfer ? "🔁 Virement" : (allCategoryLabels[tx.category] || tx.category);
         const dateSpan = document.createElement("span");
         dateSpan.className = "tx-date";
         dateSpan.textContent = dateFormatter.format(new Date(tx.expense_date + "T00:00:00"));
@@ -3190,27 +3391,40 @@
           recBadge.title = "Créée automatiquement depuis une charge récurrente";
           top.appendChild(recBadge);
         }
-        if (tx.receipt_path) {
-          const receiptBadge = document.createElement("button");
-          receiptBadge.type = "button";
-          receiptBadge.className = "tx-receipt-badge";
-          receiptBadge.textContent = "🧾";
-          receiptBadge.title = "Voir la photo du reçu";
-          receiptBadge.setAttribute("aria-label", "Voir la photo du reçu");
-          receiptBadge.addEventListener("click", () => openReceiptLightbox(tx.id));
-          top.appendChild(receiptBadge);
+        const loan = tx.loan_id ? allLoans.find((l) => l.id === tx.loan_id) : null;
+        if (loan) {
+          const loanChip = document.createElement("span");
+          loanChip.className = "tx-account-chip";
+          loanChip.textContent = "🏦 " + loan.property_name;
+          loanChip.title = "Mensualité de ce prêt";
+          top.appendChild(loanChip);
+        }
+        const ownAccountName = accountName(tx.account_id);
+        if (ownAccountName && !isTransfer) {
+          const accountChip = document.createElement("span");
+          accountChip.className = "tx-account-chip";
+          accountChip.textContent = ownAccountName;
+          top.appendChild(accountChip);
         }
 
         const desc = document.createElement("div");
         desc.className = "tx-description";
-        desc.textContent = tx.description || "—";
+        if (isTransfer) {
+          const [fromId, toId] = transferDirection(tx);
+          const route = `${accountName(fromId) || "?"} → ${accountName(toId) || "?"}`;
+          desc.textContent = tx.description ? `${route} · ${tx.description}` : route;
+        } else {
+          desc.textContent = tx.description || "—";
+        }
 
         main.appendChild(top);
         main.appendChild(desc);
 
         const amountEl = document.createElement("div");
-        amountEl.className = "tx-amount " + tx.type;
-        amountEl.textContent = (tx.type === "income" ? "+ " : "− ") + currencyFormatter.format(tx.amount);
+        amountEl.className = "tx-amount " + (isTransfer ? "transfer" : tx.type);
+        amountEl.textContent = isTransfer
+          ? "⇄ " + currencyFormatter.format(tx.amount)
+          : (tx.type === "income" ? "+ " : "− ") + currencyFormatter.format(tx.amount);
 
         const actions = document.createElement("div");
         actions.className = "tx-actions";
@@ -3272,12 +3486,18 @@
     // -------------------------------------------------------------------
     function populateFilterCategoryOptions() {
       const select = document.getElementById("filter-category");
+      const previous = select.value;
+      // Repart de zéro à chaque appel (sinon les catégories s'accumulent en
+      // double quand la fonction est rappelée après le chargement des
+      // catégories personnalisées).
+      while (select.options.length > 1) select.remove(1);
       for (const [value, label] of Object.entries(allCategoryLabels)) {
         const opt = document.createElement("option");
         opt.value = value;
         opt.textContent = label;
         select.appendChild(opt);
       }
+      select.value = previous;
     }
 
     function applyHistoryFilters() {
@@ -3285,9 +3505,11 @@
       const category = document.getElementById("filter-category").value;
       const dateStart = document.getElementById("filter-date-start").value;
       const dateEnd = document.getElementById("filter-date-end").value;
+      const account = document.getElementById("filter-account").value;
 
-      const filtered = allTransactions.filter((tx) => {
+      const filtered = allRows.filter((tx) => {
         if (category && tx.category !== category) return false;
+        if (account && tx.account_id !== account && tx.transfer_account_id !== account) return false;
         if (dateStart && tx.expense_date < dateStart) return false;
         if (dateEnd && tx.expense_date > dateEnd) return false;
         if (search) {
@@ -3299,22 +3521,35 @@
       renderTransactionList(filtered);
     }
 
-    ["filter-search", "filter-category", "filter-date-start", "filter-date-end"].forEach((id) => {
+    ["filter-search", "filter-category", "filter-date-start", "filter-date-end", "filter-account"].forEach((id) => {
       document.getElementById(id).addEventListener("input", applyHistoryFilters);
     });
 
+    // allRows : toutes les opérations, virements entre comptes compris (liste
+    // de l'historique, soldes des comptes). allTransactions : seulement les
+    // vraies dépenses et les vrais revenus — c'est elle qu'utilisent tous les
+    // totaux, graphiques, budgets et conseils, pour qu'un virement vers le
+    // Livret A ne soit jamais compté comme une dépense.
+    let allRows = [];
     let allTransactions = [];
     let currentView = "history";
 
+    function isTransferRow(tx) {
+      return Boolean(tx.transfer_account_id);
+    }
+
     async function loadTransactions() {
       try {
-        const transactions = await apiFetch("/api/transactions");
-        allTransactions = transactions;
+        const rows = await apiFetch("/api/transactions");
+        allRows = rows;
+        allTransactions = rows.filter((tx) => !isTransferRow(tx));
+        const transactions = allTransactions;
         renderTransactions(transactions);
         updateWeekSummary(transactions);
         applyHistoryFilters();
         if (currentView === "dashboard") renderDashboard(transactions);
         if (currentView === "savings") renderSavings(transactions);
+        if (currentView === "wealth") renderWealth();
       } catch (err) {
         showToast("Erreur de chargement : " + err.message, true);
       }
@@ -3331,6 +3566,7 @@
       document.getElementById("tab-export").classList.toggle("active", view === "export");
       document.getElementById("tab-savings").classList.toggle("active", view === "savings");
       document.getElementById("tab-loans").classList.toggle("active", view === "loans");
+      document.getElementById("tab-wealth").classList.toggle("active", view === "wealth");
       document.getElementById("tab-help").classList.toggle("active", view === "help");
       document.getElementById("view-history").style.display = view === "history" ? "block" : "none";
       document.getElementById("view-dashboard").classList.toggle("visible", view === "dashboard");
@@ -3338,10 +3574,12 @@
       document.getElementById("view-export").classList.toggle("visible", view === "export");
       document.getElementById("view-savings").classList.toggle("visible", view === "savings");
       document.getElementById("view-loans").classList.toggle("visible", view === "loans");
+      document.getElementById("view-wealth").classList.toggle("visible", view === "wealth");
       document.getElementById("view-help").classList.toggle("visible", view === "help");
       if (view === "dashboard") renderDashboard(allTransactions);
       if (view === "savings") renderSavings(allTransactions);
       if (view === "loans") renderLoans();
+      if (view === "wealth") renderWealth();
       if (view === "help") renderHelp();
       closeNavDrawer();
     }
@@ -3352,6 +3590,7 @@
     document.getElementById("tab-export").addEventListener("click", () => switchView("export"));
     document.getElementById("tab-savings").addEventListener("click", () => switchView("savings"));
     document.getElementById("tab-loans").addEventListener("click", () => switchView("loans"));
+    document.getElementById("tab-wealth").addEventListener("click", () => switchView("wealth"));
     document.getElementById("tab-help").addEventListener("click", () => switchView("help"));
 
     // Menu "burger" (mobile uniquement, voir le CSS @media associé) : la
@@ -3379,7 +3618,7 @@
         steps: [
           "Onglet <strong>Historique</strong> (ou n'importe quel onglet, le bouton reste affiché).",
           "Appuie sur le bouton <strong>+</strong> en bas à droite.",
-          "Remplis le montant, la catégorie, la date et, si besoin, une description.",
+          "Remplis le montant, la catégorie, la date et, si besoin, une description et le compte concerné.",
           "Appuie sur <strong>Enregistrer</strong>.",
         ],
       },
@@ -3389,6 +3628,30 @@
           "Appuie sur le bouton micro <strong>🎤</strong> en bas à droite (n'importe quel onglet).",
           "Dis par exemple « j'ai dépensé 12 euros en restaurant hier ».",
           "Vérifie ce que l'appli a compris et confirme — ou corrige avant de valider.",
+        ],
+      },
+      {
+        q: "Comment dicter un virement vers mon Livret A ou Bricks ?",
+        steps: [
+          "Ajoute d'abord tes comptes dans l'onglet <strong>💼 Patrimoine</strong>.",
+          "Appuie sur le micro <strong>🎤</strong> et dis par exemple « j'ai mis 200 euros sur mon Livret A » ou « j'ai retiré 100 euros de mon livret ».",
+          "C'est enregistré comme un virement (ni dépense ni revenu), depuis ton compte courant si tu n'en as qu'un. Pour préciser : « depuis mon Crédit Agricole ».",
+        ],
+      },
+      {
+        q: "Comment une nouvelle catégorie est-elle créée toute seule ?",
+        steps: [
+          "Quand tu dictes ou saisis 3 fois une dépense qui se ressemble (ex : « casino ») et qu'elle tombe dans « Autre », l'appli crée la catégorie « Casino » et y range ces dépenses.",
+          "Un bandeau te le signale : <strong>OK</strong> pour garder, <strong>Annuler</strong> pour tout remettre dans « Autre » (elle ne sera plus recréée).",
+          "Les dépenses suivantes de ce type y vont directement, à la voix comme à la main.",
+        ],
+      },
+      {
+        q: "Comment mes mensualités de prêt sont-elles reliées à l'onglet Prêts ?",
+        steps: [
+          "À l'import d'un relevé, une dépense du même montant que la mensualité d'un de tes prêts (ou un libellé de prêt avec un montant proche) est classée en <strong>Crédit / prêt</strong> et rattachée à ce prêt.",
+          "À la main ou à la voix, classe la dépense en <strong>Crédit / prêt</strong> : le prêt est retrouvé d'après le montant, ou choisis-le dans <strong>Prêt remboursé</strong>.",
+          "Dans l'onglet <strong>🏦 Prêts</strong>, chaque prêt affiche le nombre de mensualités vues et la date de la dernière.",
         ],
       },
       {
@@ -3408,11 +3671,12 @@
         ],
       },
       {
-        q: "Comment ajouter une photo de reçu à une dépense ?",
+        q: "Comment enregistrer un virement vers mon Livret A (ou entre deux de mes comptes) ?",
         steps: [
-          "Ouvre une dépense (nouvelle avec <strong>+</strong>, ou existante avec <strong>✏️</strong>).",
-          "Appuie sur <strong>📷 Ajouter une photo de reçu</strong>.",
-          "Prends la photo ou choisis-la dans ta galerie, puis enregistre.",
+          "Ajoute d'abord tes comptes dans l'onglet <strong>💼 Patrimoine</strong> (bouton <strong>+</strong>).",
+          "Appuie sur <strong>+</strong>, puis choisis <strong>🔁 Virement</strong> en haut du formulaire.",
+          "Choisis le compte de départ et le compte d'arrivée, le montant et la date.",
+          "Un virement n'est compté ni en dépense ni en revenu ; il fait monter le solde calculé du livret ou du placement.",
         ],
       },
       {
@@ -3477,8 +3741,18 @@
         q: "Comment importer un relevé bancaire ?",
         steps: [
           "Onglet <strong>Export</strong>, section <strong>Importer un relevé bancaire</strong>.",
-          "Choisis ton fichier (CSV ou Excel) — n'importe quelle banque est acceptée.",
-          "Appuie sur <strong>Analyser</strong> : l'IA propose des transactions (et repère les charges qui semblent récurrentes), coche ce que tu veux importer, puis valide.",
+          "Choisis le compte d'où vient le relevé dans <strong>Ce relevé vient de</strong>.",
+          "Choisis ton fichier : CSV, Excel (.xlsx, .xlsm) ou relevé PDF — n'importe quelle banque est acceptée.",
+          "Appuie sur <strong>Analyser</strong> : l'IA propose les opérations, repère les virements vers tes autres comptes et les charges qui semblent récurrentes. Coche ce que tu veux importer, puis valide.",
+        ],
+      },
+      {
+        q: "Comment importer un Excel à plusieurs onglets (prêts, mois, endettement) ?",
+        steps: [
+          "Même section <strong>Importer un relevé bancaire</strong> : choisis le fichier Excel et appuie sur <strong>Analyser</strong>.",
+          "L'appli affiche chaque onglet avec ce qu'elle y a reconnu : opérations du mois, prêt (tableau d'amortissement) ou endettement / patrimoine. Les onglets masqués sont signalés.",
+          "Change le contenu d'un onglet si besoin, ou choisis <strong>Ignorer</strong>, puis appuie sur <strong>Continuer</strong>.",
+          "Les onglets d'opérations sont lus par l'IA ; les prêts, les loyers et l'historique de patrimoine sont importés avec, en une seule validation.",
         ],
       },
       {
@@ -3498,20 +3772,44 @@
         ],
       },
       {
-        q: "Comment ajouter un prêt immobilier (crédit) ?",
+        q: "Comment ajouter un prêt (immobilier, étudiant, auto…) ?",
         steps: [
-          "Onglet <strong>🏠 Prêts</strong>.",
+          "Onglet <strong>🏦 Prêts</strong>.",
           "Appuie sur <strong>+</strong>.",
-          "Renseigne le nom du bien, le capital emprunté, le taux annuel, la mensualité et la date de la 1ère échéance.",
+          "Renseigne le nom du prêt, le capital emprunté, le taux annuel, la mensualité et la date de la 1ère échéance — et le loyer perçu s'il finance un bien loué.",
           "L'appli recalcule automatiquement l'évolution mois par mois (intérêts, capital restant dû) à partir de ces 4 valeurs — pas besoin de connaître la durée exacte du prêt.",
         ],
       },
       {
         q: "Comment voir le détail d'un prêt (graphique du capital restant dû) ?",
         steps: [
-          "Onglet <strong>🏠 Prêts</strong>.",
+          "Onglet <strong>🏦 Prêts</strong>.",
           "Appuie sur <strong>📈</strong> sur le prêt concerné pour déplier le graphique.",
           "Il montre l'évolution du capital restant dû et du cumul des intérêts, du début à la fin du prêt.",
+        ],
+      },
+      {
+        q: "Comment suivre mon Livret A, Bricks ou un autre placement ?",
+        steps: [
+          "Onglet <strong>💼 Patrimoine</strong>, bouton <strong>+</strong> : ajoute le compte avec son type (livret, placement…) et, si tu veux, son taux annuel.",
+          "Son solde se calcule tout seul à partir des virements que tu fais vers lui (saisis ou importés).",
+          "De temps en temps, appuie sur <strong>Solde réel</strong> et tape le montant affiché par ta banque : les intérêts et les gains apparaissent à ce moment-là.",
+          "Appuie sur <strong>📈</strong> pour voir la courbe du solde et une projection à 5 ans.",
+        ],
+      },
+      {
+        q: "Comment voir mon patrimoine net ?",
+        steps: [
+          "Onglet <strong>💼 Patrimoine</strong> : en haut, le total de tes comptes et placements, moins ce qu'il reste à rembourser sur tes prêts.",
+          "En bas, <strong>Historique du patrimoine</strong> trace les relevés Patrimoine / Endettement (importés d'un Excel ou ajoutés à la main).",
+        ],
+      },
+      {
+        q: "Comment comparer mes dépenses sur 3, 6 ou 12 mois ?",
+        steps: [
+          "Onglet <strong>Tableau de bord</strong>, puce <strong>3 · 6 · 12 mois</strong>.",
+          "Choisis la durée : tu vois tes moyennes par mois, ton taux d'épargne, un camembert des dépenses et l'épargne de chaque mois.",
+          "Le tableau du bas compare le mois en cours à ta moyenne, catégorie par catégorie.",
         ],
       },
     ];
@@ -3578,55 +3876,17 @@
     const CHART_COLORS = ["#3b82f6", "#22c55e", "#ef4444", "#f59e0b", "#a855f7", "#14b8a6", "#ec4899", "#64748b"];
 
     // -------------------------------------------------------------------
-    // Chargement de Chart.js : la bibliothèque vient d'un CDN externe (voir
-    // la balise <script> en haut de page). Si ce chargement rate (coupure
-    // réseau, CDN momentanément injoignable...), `Chart` n'existe pas et un
-    // `new Chart(...)` lève une erreur non interceptée — qui, avant ce
-    // correctif, interrompait tout le reste du rendu du tableau de bord sans
-    // aucun message, laissant les graphiques (et parfois des sections
-    // suivantes) vides indéfiniment, même après un rechargement de la page
-    // si le CDN restait injoignable. `safeCreateChart` remplace chaque appel
-    // direct à `new Chart(...)` : si la bibliothèque manque, on affiche un
-    // message clair à la place du graphique et on tente automatiquement un
-    // second chargement du script, puis on redessine la vue courante dès
-    // qu'il réussit — sans que l'utilisateur ait quoi que ce soit à faire.
-    // Deux CDN différents (hébergeurs distincts) : si l'un est en panne
-    // (ex: erreur 503 ponctuelle de jsdelivr), l'autre a toutes les chances
-    // de fonctionner. On alterne entre les deux plutôt que de réessayer
-    // indéfiniment celui qui vient d'échouer.
-    const CHART_JS_CDN_URLS = [
-      "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js",
-      "https://unpkg.com/chart.js@4.4.4/dist/chart.umd.min.js",
-    ];
-    let chartJsNextCdnIndex = 1; // index 0 déjà tenté via la balise <script> initiale
-    let chartJsReloadInFlight = false;
-    let chartJsAttempts = 0;
-    const CHART_JS_MAX_ATTEMPTS = 4;
-
+    // Chargement de Chart.js : la bibliothèque est auto-hébergée (servie
+    // depuis /chart.umd.min.js par notre propre API, voir la balise <script>
+    // en haut de page) — elle ne dépend plus d'aucun CDN externe. Un échec
+    // de chargement ne peut donc plus venir que d'une vraie coupure réseau
+    // chez l'utilisateur. `safeCreateChart` reste une protection défensive :
+    // si `Chart` n'existe pas (script pas encore chargé, erreur réseau), un
+    // `new Chart(...)` lèverait une erreur non interceptée qui interromprait
+    // tout le reste du rendu du tableau de bord — on affiche à la place un
+    // message clair, sans faire planter le reste de la page.
     function isChartJsReady() {
       return typeof Chart !== "undefined";
-    }
-
-    function tryReloadChartJs() {
-      if (chartJsReloadInFlight || isChartJsReady()) return;
-      if (chartJsAttempts >= CHART_JS_MAX_ATTEMPTS) return;
-      chartJsAttempts += 1;
-      chartJsReloadInFlight = true;
-      const url = CHART_JS_CDN_URLS[chartJsNextCdnIndex % CHART_JS_CDN_URLS.length] + "?retry=" + Date.now();
-      chartJsNextCdnIndex += 1;
-      const script = document.createElement("script");
-      script.src = url;
-      script.onload = () => {
-        chartJsReloadInFlight = false;
-        if (currentView === "dashboard") renderDashboard(allTransactions);
-        if (currentView === "savings") renderSavings(allTransactions);
-      };
-      script.onerror = () => {
-        chartJsReloadInFlight = false;
-        console.error("Chart.js : échec de chargement depuis " + url);
-        tryReloadChartJs(); // bascule automatiquement sur l'autre CDN
-      };
-      document.head.appendChild(script);
     }
 
     function safeCreateChart(canvas, config, emptyEl, unavailableMessage) {
@@ -3635,10 +3895,9 @@
         if (canvas) canvas.style.display = "none";
         if (emptyEl) {
           emptyEl.textContent = unavailableMessage
-            || "Graphique momentanément indisponible — nouvelle tentative en cours, réessaie dans quelques secondes.";
+            || "Graphique momentanément indisponible — recharge la page pour réessayer.";
           emptyEl.style.display = "block";
         }
-        tryReloadChartJs();
         return null;
       }
       try {
@@ -3896,6 +4155,194 @@
         },
       }, emptyEl);
     }
+
+    // -------------------------------------------------------------------
+    // Sur les 3, 6 ou 12 derniers mois : moyennes, taux d'épargne, et le mois
+    // en cours comparé à ces moyennes. Seuls les mois COMPLETS comptent dans
+    // les moyennes (le mois en cours est forcément partiel) ; une période plus
+    // longue que l'historique disponible est raccourcie au premier mois qui a
+    // des données, pour ne pas diluer les moyennes avec des mois vides.
+    // -------------------------------------------------------------------
+    let periodMonths = 3;
+    let periodCategoryChart = null;
+    let periodSavingsChart = null;
+
+    function lastCompleteMonthKeys(count) {
+      const now = new Date();
+      const keys = [];
+      for (let i = count; i >= 1; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+      }
+      return keys;
+    }
+
+    function monthLabel(key) {
+      const [y, m] = key.split("-").map(Number);
+      return monthShortFormatter.format(new Date(y, m - 1, 1));
+    }
+
+    function renderPeriodAnalysis(transactions) {
+      const contentEl = document.getElementById("period-content");
+      const emptyEl = document.getElementById("period-empty");
+      const rangeEl = document.getElementById("period-range-label");
+      const kpisEl = document.getElementById("period-kpis");
+      const tableWrap = document.getElementById("period-table-wrap");
+      if (periodCategoryChart) { periodCategoryChart.destroy(); periodCategoryChart = null; }
+      if (periodSavingsChart) { periodSavingsChart.destroy(); periodSavingsChart = null; }
+      kpisEl.innerHTML = "";
+      tableWrap.innerHTML = "";
+
+      const firstDataMonth = transactions.reduce(
+        (min, tx) => (!min || monthKeyOf(tx.expense_date) < min ? monthKeyOf(tx.expense_date) : min), null
+      );
+      const months = lastCompleteMonthKeys(periodMonths).filter((key) => firstDataMonth && key >= firstDataMonth);
+      if (months.length === 0) {
+        contentEl.style.display = "none";
+        emptyEl.style.display = "block";
+        rangeEl.textContent = "";
+        return;
+      }
+      contentEl.style.display = "block";
+      emptyEl.style.display = "none";
+
+      const monthSet = new Set(months);
+      const currentKey = monthKeyOf(todayIso());
+      const monthly = Object.fromEntries(months.map((key) => [key, { expense: 0, income: 0 }]));
+      const categoryTotals = {};
+      const currentByCategory = {};
+      for (const tx of transactions) {
+        const key = monthKeyOf(tx.expense_date);
+        const amount = Number(tx.amount);
+        if (monthSet.has(key)) {
+          monthly[key][tx.type] += amount;
+          if (tx.type === "expense") categoryTotals[tx.category] = (categoryTotals[tx.category] || 0) + amount;
+        } else if (key === currentKey && tx.type === "expense") {
+          currentByCategory[tx.category] = (currentByCategory[tx.category] || 0) + amount;
+        }
+      }
+
+      const n = months.length;
+      const totalExpense = months.reduce((s, k) => s + monthly[k].expense, 0);
+      const totalIncome = months.reduce((s, k) => s + monthly[k].income, 0);
+      const avgExpense = totalExpense / n;
+      const avgIncome = totalIncome / n;
+      const avgSavings = avgIncome - avgExpense;
+      const savingsRate = avgIncome > 0 ? avgSavings / avgIncome : null;
+
+      rangeEl.textContent =
+        `${monthLabel(months[0])} → ${monthLabel(months[n - 1])}` +
+        (n < periodMonths ? ` (seulement ${n} mois de données pour l'instant)` : "") +
+        " — moyennes calculées sur les mois complets, sans le mois en cours.";
+
+      const mkKpi = (label, value, cls) => {
+        const card = document.createElement("div");
+        card.className = "stat-card";
+        card.innerHTML = `<p class="label">${escapeHtml(label)}</p><p class="value ${cls || ""}">${escapeHtml(value)}</p>`;
+        return card;
+      };
+      kpisEl.appendChild(mkKpi("Dépenses / mois", currencyFormatter.format(avgExpense)));
+      kpisEl.appendChild(mkKpi("Revenus / mois", currencyFormatter.format(avgIncome)));
+      kpisEl.appendChild(mkKpi("Épargne / mois", currencyFormatter.format(avgSavings), avgSavings >= 0 ? "positive" : "negative"));
+      kpisEl.appendChild(mkKpi(
+        "Taux d'épargne",
+        savingsRate === null ? "—" : `${Math.round(savingsRate * 100)} %`,
+        savingsRate !== null && savingsRate >= 0 ? "positive" : "negative"
+      ));
+
+      // Camembert des dépenses de la période
+      const catEntries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+      const catCanvas = document.getElementById("chart-period-categories");
+      if (catEntries.length) {
+        catCanvas.style.display = "block";
+        periodCategoryChart = safeCreateChart(catCanvas, {
+          type: "doughnut",
+          data: {
+            labels: catEntries.map(([cat]) => allCategoryLabels[cat] || cat),
+            datasets: [{
+              data: catEntries.map(([, v]) => v),
+              backgroundColor: catEntries.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+              borderColor: "#1a1d24",
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: "bottom", labels: { color: "#e6e6e6", boxWidth: 12 } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const share = totalExpense > 0 ? Math.round((ctx.parsed / totalExpense) * 100) : 0;
+                    return `${ctx.label} : ${currencyFormatter.format(ctx.parsed)} (${share} %, soit ${currencyFormatter.format(ctx.parsed / n)}/mois)`;
+                  },
+                },
+              },
+            },
+          },
+        });
+      } else {
+        catCanvas.style.display = "none";
+      }
+
+      // Épargne de chaque mois
+      const savingsCanvas = document.getElementById("chart-period-savings");
+      const savingsValues = months.map((k) => monthly[k].income - monthly[k].expense);
+      periodSavingsChart = safeCreateChart(savingsCanvas, {
+        type: "bar",
+        data: {
+          labels: months.map(monthLabel),
+          datasets: [{
+            label: "Épargne du mois",
+            data: savingsValues,
+            backgroundColor: savingsValues.map((v) => (v >= 0 ? "#22c55e" : "#ef4444")),
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+            y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => currencyFormatter.format(ctx.parsed.y) } },
+          },
+        },
+      });
+
+      // Ce mois-ci (en cours) comparé à la moyenne de la période
+      const categories = [...new Set([...Object.keys(categoryTotals), ...Object.keys(currentByCategory)])]
+        .sort((a, b) => (categoryTotals[b] || 0) - (categoryTotals[a] || 0));
+      let html = `<table class="simple-table"><thead><tr><th>Catégorie</th><th>Moyenne/mois</th><th title="${escapeHtml(monthLabel(currentKey))}, en cours">Ce mois-ci</th><th>Écart</th></tr></thead><tbody>`;
+      let sumAvg = 0;
+      let sumCurrent = 0;
+      for (const cat of categories) {
+        const avg = (categoryTotals[cat] || 0) / n;
+        const current = currentByCategory[cat] || 0;
+        sumAvg += avg;
+        sumCurrent += current;
+        const diff = current - avg;
+        const diffCell = Math.abs(diff) < 0.01
+          ? "<td>—</td>"
+          : `<td class="${diff > 0 ? "diff-negative" : "diff-positive"}">${diff > 0 ? "+" : ""}${currencyFormatter.format(diff)}</td>`;
+        html += `<tr><td>${escapeHtml(allCategoryLabels[cat] || cat)}</td><td>${currencyFormatter.format(avg)}</td><td>${currencyFormatter.format(current)}</td>${diffCell}</tr>`;
+      }
+      const totalDiff = sumCurrent - sumAvg;
+      html += `<tr class="total-row"><td>Total dépenses</td><td>${currencyFormatter.format(sumAvg)}</td><td>${currencyFormatter.format(sumCurrent)}</td>` +
+        `<td class="${totalDiff > 0 ? "diff-negative" : "diff-positive"}">${totalDiff > 0 ? "+" : ""}${currencyFormatter.format(totalDiff)}</td></tr>`;
+      html += "</tbody></table>";
+      tableWrap.innerHTML = html;
+    }
+
+    document.getElementById("period-toggle").addEventListener("click", (e) => {
+      const btn = e.target.closest(".period-btn");
+      if (!btn) return;
+      periodMonths = Number(btn.dataset.months);
+      document.querySelectorAll(".period-btn").forEach((b) => b.classList.toggle("active", b === btn));
+      renderPeriodAnalysis(allTransactions);
+    });
 
     // -------------------------------------------------------------------
     // Comparer deux mois
@@ -4185,6 +4632,7 @@
       populateMonthSelect(transactions);
       renderCategoryChart(transactions);
       renderIncomeCategoryChart(transactions);
+      renderPeriodAnalysis(transactions);
       renderBudgets(transactions);
       renderEvolutionChart(transactions);
       populateCompareMonthSelects(transactions);
@@ -4203,6 +4651,7 @@
     const DASHBOARD_SECTIONS = [
       { key: "expenses", label: "Dépenses", rowId: "dash-row-expenses" },
       { key: "income", label: "Revenus", rowId: "dash-row-income" },
+      { key: "period", label: "3 · 6 · 12 mois", rowId: "dash-row-period" },
       { key: "budgets", label: "Budgets", rowId: "dash-row-budgets" },
       { key: "evolution", label: "Évolution", rowId: "dash-row-evolution" },
       { key: "compare", label: "Comparer", rowId: "dash-row-compare" },
@@ -4224,7 +4673,7 @@
       // (display:none) se retrouve avec un canevas de taille nulle et ne se
       // corrige pas tout seul en redevenant visible — on force un resize
       // juste après l'avoir affiché, pour les 4 graphiques concernés.
-      for (const chart of [categoryChart, incomeCategoryChart, evolutionChart, yearlyChart]) {
+      for (const chart of [categoryChart, incomeCategoryChart, evolutionChart, yearlyChart, periodCategoryChart, periodSavingsChart]) {
         if (chart) chart.resize();
       }
     }
@@ -4332,7 +4781,11 @@
       };
 
       let question;
-      if (kind === "transaction") {
+      if (kind === "transaction" && parsed.is_transfer) {
+        question =
+          `Virement de ${currencyFormatter.format(parsed.amount)} (${parsed.transfer_label}), ` +
+          `le ${dateFormatter.format(new Date(parsed.expense_date))} — c'est bien ça ?`;
+      } else if (kind === "transaction") {
         const verb = parsed.type === "income" ? "Revenu" : "Dépense";
         const catLabel = allCategoryLabels[parsed.category] || parsed.category;
         const descPart = parsed.description ? ` (${parsed.description})` : "";
@@ -4681,7 +5134,114 @@
       }
 
       if (!suggestion || dismissedSuggestionKeys.has(suggestion.key)) return;
+      if (suggestion.kind === "generic") {
+        // Dépense répétée, toujours rangée dans "Autre" : la catégorie est
+        // créée et appliquée tout de suite (avec un bouton Annuler), plutôt
+        // que simplement proposée.
+        autoCreateCategory(suggestion);
+        return;
+      }
       showCategorySuggestionBanner(suggestion);
+    }
+
+    // Nom de la nouvelle catégorie : le mot-clé commun à toutes les
+    // opérations concernées (le plus long, écrit comme dans la description),
+    // sinon la description la plus récente.
+    function autoCategoryLabel(transactions) {
+      let common = null;
+      for (const tx of transactions) {
+        const keywords = extractDescriptionKeywords(tx.description);
+        common = common === null ? keywords : new Set([...common].filter((k) => keywords.has(k)));
+      }
+      const best = [...(common || [])].sort((a, b) => b.length - a.length)[0];
+      const latest = transactions[0] ? (transactions[0].description || "") : "";
+      let label = latest.trim().slice(0, 30);
+      if (best) {
+        const original = latest.split(/\s+/).find((word) =>
+          word.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "") === best
+        );
+        label = (original || best).replace(/[^\p{L}\p{N}' -]/gu, "");
+      }
+      label = label.trim();
+      return label ? label.charAt(0).toUpperCase() + label.slice(1) : "";
+    }
+
+    async function autoCreateCategory(suggestion) {
+      const similar = suggestion.txIds
+        .map((id) => allTransactions.find((t) => t.id === id))
+        .filter(Boolean);
+      const label = autoCategoryLabel(similar);
+      if (!label || similar.length === 0) {
+        showCategorySuggestionBanner(suggestion);
+        return;
+      }
+      const value = slugifyCategory(label);
+      const existing = categoriesByType[suggestion.type].find(([v]) => v === value);
+      const finalLabel = existing ? existing[1] : label;
+      const created = !existing;
+      const originals = similar.map((t) => ({ id: t.id, category: t.category, description: t.description || null }));
+      try {
+        if (created) await saveCustomCategory(suggestion.type, value, finalLabel);
+        for (const tx of similar) {
+          const payload = { category: value };
+          const cleaned = stripMatchedKeywordsFromDescription(tx.description, suggestion.keywords);
+          if (cleaned !== (tx.description || null)) payload.description = cleaned;
+          await apiFetch(`/api/transactions/${tx.id}`, { method: "PUT", body: JSON.stringify(payload) });
+        }
+        populateCategories(currentType === "transfer" ? "expense" : currentType, categoryInput.value);
+        await loadTransactions();
+        showAutoCategoryBanner(suggestion, finalLabel, value, created, originals);
+      } catch (err) {
+        showToast("Catégorie automatique impossible : " + err.message, true);
+      }
+    }
+
+    function showAutoCategoryBanner(suggestion, label, value, created, originals) {
+      const el = document.getElementById("category-suggestion-banner");
+      el.innerHTML = "";
+      el.classList.remove("hidden");
+      const text = document.createElement("p");
+      text.textContent = created
+        ? `Nouvelle catégorie « ${label} » créée : tes ${originals.length} dépenses similaires y sont rangées.`
+        : `Tes ${originals.length} dépenses similaires sont rangées dans « ${label} ».`;
+      el.appendChild(text);
+      const controls = document.createElement("div");
+      controls.className = "category-suggestion-controls";
+      const okBtn = document.createElement("button");
+      okBtn.textContent = "OK";
+      okBtn.className = "btn-primary-sm";
+      okBtn.addEventListener("click", hideCategorySuggestionBanner);
+      const undoBtn = document.createElement("button");
+      undoBtn.textContent = "Annuler";
+      undoBtn.className = "btn-secondary-sm";
+      undoBtn.addEventListener("click", async () => {
+        undoBtn.disabled = true;
+        try {
+          for (const o of originals) {
+            await apiFetch(`/api/transactions/${o.id}`, {
+              method: "PUT",
+              body: JSON.stringify({ category: o.category, description: o.description }),
+            });
+          }
+          if (created) {
+            await apiFetch(`/api/custom-categories/${suggestion.type}/${encodeURIComponent(value)}`, { method: "DELETE" });
+            categoriesByType[suggestion.type] = categoriesByType[suggestion.type].filter(([v]) => v !== value);
+            delete allCategoryLabels[value];
+            populateFilterCategoryOptions();
+          }
+          // Ne plus recréer cette catégorie automatiquement.
+          dismissSuggestion(suggestion.key);
+          hideCategorySuggestionBanner();
+          showToast("Annulé : les dépenses sont revenues dans « Autre »");
+          await loadTransactions();
+        } catch (err) {
+          showToast("Erreur : " + err.message, true);
+          undoBtn.disabled = false;
+        }
+      });
+      controls.appendChild(okBtn);
+      controls.appendChild(undoBtn);
+      el.appendChild(controls);
     }
 
     function hideCategorySuggestionBanner() {
@@ -4845,6 +5405,36 @@
       const verb = parsed.type === "income" ? "Revenu" : "Dépense";
       const amountLabel = currencyFormatter.format(parsed.amount);
 
+      // "J'ai mis 200 € sur mon Livret A" : virement entre deux comptes de
+      // l'utilisateur, ni dépense ni revenu.
+      if (parsed.is_transfer) {
+        const transferPayload = {
+          type: parsed.type,
+          amount: parsed.amount,
+          category: TRANSFER_CATEGORY,
+          description: parsed.description,
+          expense_date: parsed.expense_date,
+          account_id: parsed.account_id,
+          transfer_account_id: parsed.transfer_account_id,
+        };
+        if (parsed.is_correction && lastVoiceTransactionId) {
+          await apiFetch(`/api/transactions/${lastVoiceTransactionId}`, {
+            method: "PUT",
+            body: JSON.stringify(transferPayload),
+          });
+          showToast(`Corrigé : virement de ${amountLabel} (${parsed.transfer_label})`);
+        } else {
+          const created = await apiFetch("/api/transactions", {
+            method: "POST",
+            body: JSON.stringify(transferPayload),
+          });
+          lastVoiceTransactionId = created.id;
+          showToast(`Virement ajouté : ${amountLabel} (${parsed.transfer_label})`);
+        }
+        await loadTransactions();
+        return;
+      }
+
       // "récurrent", "abonnement", "tous les mois"... détecté par l'IA : on
       // crée/corrige une charge récurrente au lieu d'une transaction
       // ponctuelle, quel que soit l'onglet actuellement affiché — le micro
@@ -4887,7 +5477,8 @@
       if (parsed.is_correction && lastVoiceTransactionId) {
         await apiFetch(`/api/transactions/${lastVoiceTransactionId}`, {
           method: "PUT",
-          body: JSON.stringify(payload),
+          // Si l'opération corrigée était un virement, elle n'en est plus un.
+          body: JSON.stringify({ ...payload, transfer_account_id: null }),
         });
         showToast(`Corrigé : ${verb.toLowerCase()} de ${amountLabel}`);
       } else {
@@ -5307,6 +5898,8 @@
     const loanRateInput = document.getElementById("loan-input-rate");
     const loanPaymentInput = document.getElementById("loan-input-payment");
     const loanStartDateInput = document.getElementById("loan-input-start-date");
+    const loanRentInput = document.getElementById("loan-input-rent");
+    const loanEndedInput = document.getElementById("loan-input-ended");
     const loanSaveBtn = document.getElementById("loan-btn-save");
 
     async function loadLoans() {
@@ -5383,6 +5976,7 @@
       const today = todayIso();
       let totalRemaining = 0;
       let totalMonthlyPayment = 0;
+      let totalRent = 0;
 
       for (const loan of allLoans) {
         const schedule = computeLoanAmortization(loan);
@@ -5392,6 +5986,7 @@
           totalRemaining += state.remaining;
           totalMonthlyPayment += Number(loan.monthly_payment);
         }
+        if (active && loan.monthly_rent != null) totalRent += Number(loan.monthly_rent);
 
         const card = document.createElement("div");
         card.className = "loan-card" + (!active || state.finished ? " ended" : "");
@@ -5400,7 +5995,7 @@
         head.className = "loan-card-head";
         const name = document.createElement("div");
         name.className = "loan-card-name";
-        name.textContent = loan.property_name;
+        name.textContent = loan.property_name + (!active ? " (terminé)" : "");
         const actions = document.createElement("div");
         actions.className = "tx-actions";
         const detailBtn = document.createElement("button");
@@ -5436,17 +6031,41 @@
           return span;
         };
         stats.appendChild(mkStat("Mensualité", currencyFormatter.format(loan.monthly_payment)));
-        stats.appendChild(mkStat(
-          state.finished ? "Remboursé" : "Capital restant dû",
-          state.finished ? "0 €" : currencyFormatter.format(state.remaining)
-        ));
-        stats.appendChild(mkStat("Taux", `${loan.annual_rate_pct}%`));
-        if (state.endDate) {
+        if (!active && !state.finished) {
+          stats.appendChild(mkStat("Statut", "terminé (vendu ou remboursé)"));
+        } else {
+          stats.appendChild(mkStat(
+            state.finished ? "Remboursé" : "Capital restant dû",
+            state.finished ? "0 €" : currencyFormatter.format(state.remaining)
+          ));
+        }
+        stats.appendChild(mkStat("Taux", `${formatRate(loan.annual_rate_pct)} %`));
+        if (loan.monthly_rent != null && Number(loan.monthly_rent) > 0) {
+          const rent = Number(loan.monthly_rent);
+          stats.appendChild(mkStat("Loyer", currencyFormatter.format(rent)));
+          if (active && !state.finished) {
+            const net = rent - Number(loan.monthly_payment);
+            stats.appendChild(mkStat("Loyer − mensualité", (net >= 0 ? "+" : "") + currencyFormatter.format(net)));
+          }
+        }
+        if (state.endDate && (active || state.finished)) {
           stats.appendChild(mkStat(
             state.finished ? "Terminé le" : "Fin estimée",
             monthFormatter.format(state.endDate)
           ));
         }
+
+        // Mensualités rattachées à ce prêt dans les opérations (importées,
+        // dictées ou saisies en "Crédit / prêt").
+        const paid = allRows
+          .filter((t) => t.loan_id === loan.id)
+          .sort((a, b) => b.expense_date.localeCompare(a.expense_date));
+        stats.appendChild(mkStat(
+          "Mensualités vues dans tes opérations",
+          paid.length
+            ? `${paid.length} (dernière le ${dateFormatter.format(new Date(paid[0].expense_date + "T00:00:00"))})`
+            : "aucune pour l'instant"
+        ));
 
         card.appendChild(head);
         card.appendChild(stats);
@@ -5517,6 +6136,9 @@
       if (allLoans.length > 0) {
         totalsEl.appendChild(mkTotalCard("Capital restant dû (total)", currencyFormatter.format(totalRemaining)));
         totalsEl.appendChild(mkTotalCard("Mensualités (total/mois)", currencyFormatter.format(totalMonthlyPayment)));
+        if (totalRent > 0) {
+          totalsEl.appendChild(mkTotalCard("Loyers (total/mois)", currencyFormatter.format(totalRent)));
+        }
       }
     }
 
@@ -5529,6 +6151,9 @@
       loanRateInput.value = loan ? loan.annual_rate_pct : "";
       loanPaymentInput.value = loan ? loan.monthly_payment : "";
       loanStartDateInput.value = loan ? loan.start_date : "";
+      loanRentInput.value = loan && loan.monthly_rent != null ? Number(loan.monthly_rent) : "";
+      loanEndedInput.checked = Boolean(loan && loan.active === false);
+      document.getElementById("loan-ended-wrap").classList.toggle("hidden", !loan);
       loanOverlayEl.classList.remove("hidden");
       loanPropertyNameInput.focus();
     }
@@ -5547,8 +6172,11 @@
       const rate = parseFloat(loanRateInput.value);
       const payment = parseFloat(loanPaymentInput.value);
       const startDate = loanStartDateInput.value;
+      const rentRaw = loanRentInput.value.trim();
+      const rent = rentRaw === "" ? null : parseFloat(rentRaw);
 
-      if (!propertyName) { showToast("Le nom du bien est obligatoire", true); return; }
+      if (!propertyName) { showToast("Le nom du prêt est obligatoire", true); return; }
+      if (rent !== null && (isNaN(rent) || rent < 0)) { showToast("Loyer invalide", true); return; }
       if (!principal || principal <= 0) { showToast("Capital emprunté invalide", true); return; }
       if (rate === null || isNaN(rate) || rate < 0) { showToast("Taux invalide", true); return; }
       if (!payment || payment <= 0) { showToast("Mensualité invalide", true); return; }
@@ -5560,7 +6188,9 @@
         annual_rate_pct: rate,
         monthly_payment: payment,
         start_date: startDate,
+        monthly_rent: rent,
       };
+      if (editingLoanId) payload.active = !loanEndedInput.checked;
 
       loanSaveBtn.disabled = true;
       try {
@@ -5590,6 +6220,692 @@
         delete loanOpenState[id];
         await loadLoans();
         renderLoans();
+      } catch (err) {
+        showToast("Erreur : " + err.message, true);
+      }
+    }
+
+    // -------------------------------------------------------------------
+    // Comptes (banques, livrets, placements), soldes relevés et patrimoine
+    // -------------------------------------------------------------------
+    // Le solde d'un compte n'est jamais stocké tel quel : il est recalculé à
+    // partir du dernier solde réel tapé par l'utilisateur (s'il y en a un)
+    // et des mouvements (virements, opérations rattachées au compte) qui ont
+    // eu lieu depuis. Sans solde réel, un livret ou un placement affiche le
+    // cumul des virements reçus ; un compte courant reste "non renseigné"
+    // (un relevé importé ne couvre jamais tout son historique).
+    let allAccounts = [];
+    let allBalances = [];
+    let allNetWorth = [];
+    let editingAccountId = null;
+    let balanceAccountId = null;
+    const accountOpenState = {};
+    const accountCharts = {};
+    let networthChart = null;
+
+    const ACCOUNT_KIND_LABELS = {
+      bank: "Compte courant",
+      savings: "Livret / épargne",
+      investment: "Placement",
+      other: "Autre",
+    };
+    const ACCOUNT_KIND_GROUPS = {
+      bank: "Comptes courants",
+      savings: "Livrets et épargne",
+      investment: "Placements",
+      other: "Autres",
+    };
+    const ACCOUNT_KIND_ORDER = ["bank", "savings", "investment", "other"];
+
+    function formatRate(value) {
+      return Number(value).toLocaleString("fr-FR", { maximumFractionDigits: 3 });
+    }
+
+    function accountById(id) {
+      return id ? allAccounts.find((acc) => acc.id === id) || null : null;
+    }
+
+    function accountName(id) {
+      const acc = accountById(id);
+      return acc ? acc.name : null;
+    }
+
+    // Sens d'un virement : [compte qui se vide, compte qui se remplit]. Une
+    // ligne au débit (type "expense") part de account_id ; une ligne au
+    // crédit (type "income", ex : relevé du livret importé) arrive sur
+    // account_id.
+    function transferDirection(tx) {
+      return tx.type === "income"
+        ? [tx.transfer_account_id, tx.account_id]
+        : [tx.account_id, tx.transfer_account_id];
+    }
+
+    function sortedAccounts() {
+      return [...allAccounts].sort((a, b) =>
+        ACCOUNT_KIND_ORDER.indexOf(a.kind) - ACCOUNT_KIND_ORDER.indexOf(b.kind)
+        || a.name.localeCompare(b.name, "fr")
+      );
+    }
+
+    function fillAccountSelect(select, { emptyLabel = null, selected = null, onlyActive = true } = {}) {
+      if (!select) return;
+      select.innerHTML = "";
+      if (emptyLabel !== null) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = emptyLabel;
+        select.appendChild(opt);
+      }
+      for (const acc of sortedAccounts()) {
+        if (onlyActive && acc.active === false && acc.id !== selected) continue;
+        const opt = document.createElement("option");
+        opt.value = acc.id;
+        opt.textContent = acc.name;
+        select.appendChild(opt);
+      }
+      const values = [...select.options].map((o) => o.value);
+      select.value = selected && values.includes(selected) ? selected : (values[0] || "");
+    }
+
+    function refreshAccountSelects() {
+      const filter = document.getElementById("filter-account");
+      fillAccountSelect(filter, { emptyLabel: "Tous les comptes", selected: filter.value, onlyActive: false });
+      filter.classList.toggle("hidden", allAccounts.length === 0);
+      const importSelect = document.getElementById("generic-import-account");
+      if (importSelect) fillAccountSelect(importSelect, { emptyLabel: "Non précisé", selected: importSelect.value });
+      if (typeof refreshPlacementAccountSelect === "function") refreshPlacementAccountSelect();
+    }
+
+    async function loadAccounts() {
+      try {
+        const [accounts, balances, snapshots] = await Promise.all([
+          apiFetch("/api/accounts"),
+          apiFetch("/api/account-balances"),
+          apiFetch("/api/net-worth-snapshots"),
+        ]);
+        allAccounts = accounts;
+        allBalances = balances;
+        allNetWorth = snapshots;
+      } catch (err) {
+        showToast("Erreur de chargement des comptes : " + (err.message || "une erreur est survenue"), true);
+      }
+      refreshAccountSelects();
+    }
+
+    function daysBetween(a, b) {
+      return Math.abs(Date.parse(b + "T00:00:00") - Date.parse(a + "T00:00:00")) / 86400000;
+    }
+
+    // Mouvements d'argent d'un compte, du plus ancien au plus récent :
+    // montant positif quand l'argent arrive, négatif quand il part.
+    function accountMovements(accountId) {
+      const raw = [];
+      for (const tx of allRows) {
+        const amount = Number(tx.amount);
+        if (tx.transfer_account_id) {
+          const [fromId, toId] = transferDirection(tx);
+          if (toId === accountId) raw.push({ date: tx.expense_date, amount, tx, transfer: true });
+          else if (fromId === accountId) raw.push({ date: tx.expense_date, amount: -amount, tx, transfer: true });
+        } else if (tx.account_id === accountId) {
+          raw.push({ date: tx.expense_date, amount: tx.type === "income" ? amount : -amount, tx, transfer: false });
+        }
+      }
+      raw.sort((a, b) => a.date.localeCompare(b.date));
+      // Un même virement importé depuis les relevés DES DEUX comptes apparaît
+      // deux fois (une ligne au débit d'un côté, une au crédit de l'autre) :
+      // on ne le compte qu'une fois (même sens, même montant, à 5 jours près,
+      // enregistré depuis deux relevés différents).
+      const kept = [];
+      const dropped = new Set();
+      for (let i = 0; i < raw.length; i++) {
+        if (dropped.has(i)) continue;
+        const move = raw[i];
+        if (move.transfer) {
+          const [fromA, toA] = transferDirection(move.tx);
+          for (let j = i + 1; j < raw.length && daysBetween(move.date, raw[j].date) <= 5; j++) {
+            const other = raw[j];
+            if (dropped.has(j) || !other.transfer) continue;
+            const [fromB, toB] = transferDirection(other.tx);
+            if (
+              fromA === fromB && toA === toB
+              && Math.abs(other.amount - move.amount) < 0.01
+              && other.tx.account_id !== move.tx.account_id
+            ) {
+              dropped.add(j);
+              break;
+            }
+          }
+        }
+        kept.push(move);
+      }
+      return kept;
+    }
+
+    function computeAccountState(acc) {
+      const today = todayIso();
+      const snapshots = allBalances
+        .filter((b) => b.account_id === acc.id)
+        .sort((a, b) => a.balance_date.localeCompare(b.balance_date) || String(a.created_at).localeCompare(String(b.created_at)));
+      const moves = accountMovements(acc.id).filter((m) => m.date <= today);
+      const last = snapshots.length ? snapshots[snapshots.length - 1] : null;
+      const since = last ? moves.filter((m) => m.date > last.balance_date) : moves;
+      const delta = since.reduce((sum, m) => sum + m.amount, 0);
+      const known = Boolean(last) || ((acc.kind === "savings" || acc.kind === "investment") && moves.length > 0);
+      const balance = (last ? Number(last.balance) : 0) + delta;
+
+      // Courbe : on rejoue les mouvements dans l'ordre ; un solde réel
+      // remplace la valeur calculée à sa date (il inclut les mouvements du
+      // jour même).
+      const events = [
+        ...moves.map((m) => ({ date: m.date, kind: "move", value: m.amount })),
+        ...snapshots.map((s) => ({ date: s.balance_date, kind: "snap", value: Number(s.balance) })),
+      ].sort((a, b) => a.date.localeCompare(b.date) || (a.kind === "snap") - (b.kind === "snap"));
+      // Avec un solde réel, la courbe part du premier : les mouvements plus
+      // anciens s'appliquaient à un solde de départ inconnu.
+      const history = [];
+      let running = 0;
+      let started = snapshots.length === 0 && acc.kind !== "bank";
+      for (const ev of events) {
+        if (ev.kind === "snap") {
+          running = ev.value;
+          started = true;
+        } else {
+          running += ev.value;
+        }
+        if (!started) continue;
+        if (history.length && history[history.length - 1].date === ev.date) history[history.length - 1].value = running;
+        else history.push({ date: ev.date, value: running });
+      }
+
+      // Versements nets moyens des 6 derniers mois (pour la projection).
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const sixIso = sixMonthsAgo.toISOString().slice(0, 10);
+      const recentTransfersIn = moves
+        .filter((m) => m.transfer && m.date >= sixIso)
+        .reduce((sum, m) => sum + m.amount, 0);
+
+      return { balance, known, last, since, snapshots, moves, history, monthlyContribution: recentTransfersIn / 6 };
+    }
+
+    // Projection simple : intérêts composés mensuels au taux du compte, avec
+    // les mêmes versements mensuels qu'en moyenne ces 6 derniers mois.
+    function projectBalance(start, monthly, annualRatePct, years) {
+      const rate = annualRatePct / 100 / 12;
+      let value = start;
+      for (let i = 0; i < years * 12; i++) value = value * (1 + rate) + monthly;
+      return value;
+    }
+
+    function loansRemainingTotal() {
+      const today = todayIso();
+      let total = 0;
+      for (const loan of allLoans) {
+        if (loan.active === false) continue;
+        const state = loanStateAsOf(computeLoanAmortization(loan), loan, today);
+        if (!state.finished) total += state.remaining;
+      }
+      return total;
+    }
+
+    function renderWealth() {
+      const listEl = document.getElementById("wealth-accounts");
+      const emptyEl = document.getElementById("wealth-empty-state");
+      const totalsEl = document.getElementById("wealth-totals");
+      listEl.innerHTML = "";
+      totalsEl.innerHTML = "";
+      emptyEl.style.display = allAccounts.length === 0 ? "block" : "none";
+
+      let assets = 0;
+      let unknownCount = 0;
+      const states = {};
+      for (const acc of allAccounts) {
+        const state = computeAccountState(acc);
+        states[acc.id] = state;
+        if (acc.active === false) continue;
+        if (state.known) assets += state.balance;
+        else unknownCount += 1;
+      }
+      const debts = loansRemainingTotal();
+
+      const mkTotal = (label, value, hint, cls = "") => {
+        const card = document.createElement("div");
+        card.className = "stat-card";
+        card.innerHTML = `<p class="label">${escapeHtml(label)}</p><p class="value ${cls}">${escapeHtml(value)}</p>`;
+        if (hint) card.title = hint;
+        return card;
+      };
+      totalsEl.appendChild(mkTotal(
+        "Comptes et placements",
+        currencyFormatter.format(assets),
+        unknownCount ? `${unknownCount} compte(s) sans solde renseigné ne sont pas comptés` : ""
+      ));
+      totalsEl.appendChild(mkTotal("Prêts restant dus", currencyFormatter.format(debts)));
+      totalsEl.appendChild(mkTotal("Patrimoine net", currencyFormatter.format(assets - debts), "", assets - debts >= 0 ? "positive" : "negative"));
+
+      for (const kind of ACCOUNT_KIND_ORDER) {
+        const group = sortedAccounts().filter((acc) => acc.kind === kind);
+        if (group.length === 0) continue;
+        const title = document.createElement("div");
+        title.className = "wealth-group-title";
+        title.textContent = ACCOUNT_KIND_GROUPS[kind];
+        listEl.appendChild(title);
+        for (const acc of group) listEl.appendChild(renderAccountCard(acc, states[acc.id]));
+      }
+      for (const acc of allAccounts) {
+        if (accountOpenState[acc.id]) renderAccountChart(acc, states[acc.id]);
+      }
+      renderNetWorth();
+    }
+
+    function renderAccountCard(acc, state) {
+      const card = document.createElement("div");
+      card.className = `account-card kind-${acc.kind}` + (acc.active === false ? " closed" : "");
+
+      const head = document.createElement("div");
+      head.className = "account-card-head";
+      const titleWrap = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "account-card-name";
+      name.textContent = acc.name + (acc.active === false ? " (fermé)" : "");
+      const kind = document.createElement("div");
+      kind.className = "account-card-kind";
+      kind.textContent = ACCOUNT_KIND_LABELS[acc.kind] + (acc.annual_rate_pct != null ? ` · ${formatRate(acc.annual_rate_pct)} %/an` : "");
+      titleWrap.appendChild(name);
+      titleWrap.appendChild(kind);
+
+      const actions = document.createElement("div");
+      actions.className = "tx-actions";
+      const detailBtn = document.createElement("button");
+      detailBtn.className = "icon-btn";
+      detailBtn.textContent = accountOpenState[acc.id] ? "📉" : "📈";
+      detailBtn.setAttribute("aria-label", "Voir l'évolution");
+      detailBtn.title = "Voir l'évolution du solde";
+      detailBtn.addEventListener("click", () => {
+        accountOpenState[acc.id] = !accountOpenState[acc.id];
+        renderWealth();
+      });
+      const editBtn = document.createElement("button");
+      editBtn.className = "icon-btn";
+      editBtn.textContent = "✏️";
+      editBtn.setAttribute("aria-label", "Modifier le compte");
+      editBtn.addEventListener("click", () => openAccountModal(acc));
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "icon-btn danger";
+      deleteBtn.textContent = "🗑️";
+      deleteBtn.setAttribute("aria-label", "Supprimer le compte");
+      deleteBtn.addEventListener("click", () => deleteAccount(acc));
+      actions.appendChild(detailBtn);
+      actions.appendChild(editBtn);
+      actions.appendChild(deleteBtn);
+      head.appendChild(titleWrap);
+      head.appendChild(actions);
+      card.appendChild(head);
+
+      const balanceEl = document.createElement("div");
+      const statusEl = document.createElement("div");
+      statusEl.className = "account-card-status";
+      if (state.known) {
+        balanceEl.className = "account-card-balance";
+        balanceEl.textContent = currencyFormatter.format(state.balance);
+        if (state.last) {
+          const lastLabel = dateFormatter.format(new Date(state.last.balance_date + "T00:00:00"));
+          statusEl.textContent = state.since.length
+            ? `Solde réel du ${lastLabel}, + ${state.since.length} mouvement(s) depuis`
+            : `Solde réel du ${lastLabel}`;
+        } else {
+          statusEl.textContent = `Calculé à partir de ${state.moves.length} mouvement(s) — tape le solde réel pour corriger`;
+        }
+      } else {
+        balanceEl.className = "account-card-balance unknown";
+        balanceEl.textContent = "Solde non renseigné";
+        statusEl.textContent = state.moves.length
+          ? `${state.moves.length} opération(s) rattachée(s) — tape le solde réel pour suivre ce compte`
+          : "Tape le solde réel pour suivre ce compte";
+      }
+      card.appendChild(balanceEl);
+      card.appendChild(statusEl);
+
+      const row = document.createElement("div");
+      row.className = "account-card-actions-row";
+      const balanceBtn = document.createElement("button");
+      balanceBtn.className = "secondary";
+      balanceBtn.textContent = "Solde réel";
+      balanceBtn.addEventListener("click", () => openBalanceModal(acc, state));
+      row.appendChild(balanceBtn);
+      card.appendChild(row);
+
+      const detail = document.createElement("div");
+      detail.className = "account-detail" + (accountOpenState[acc.id] ? " visible" : "");
+      const chartWrap = document.createElement("div");
+      chartWrap.className = "chart-wrap";
+      const canvas = document.createElement("canvas");
+      canvas.id = `chart-account-${acc.id}`;
+      chartWrap.appendChild(canvas);
+      const chartEmpty = document.createElement("div");
+      chartEmpty.className = "dashboard-empty";
+      chartEmpty.id = `chart-account-empty-${acc.id}`;
+      chartEmpty.style.display = "none";
+      detail.appendChild(chartWrap);
+      detail.appendChild(chartEmpty);
+
+      if ((acc.kind === "savings" || acc.kind === "investment") && acc.annual_rate_pct != null && state.known) {
+        const projection = document.createElement("p");
+        projection.className = "account-projection";
+        const monthly = Math.max(0, state.monthlyContribution);
+        const in5 = projectBalance(state.balance, monthly, Number(acc.annual_rate_pct), 5);
+        projection.innerHTML =
+          `Dans 5 ans, à ${escapeHtml(formatRate(acc.annual_rate_pct))} %/an` +
+          (monthly > 0 ? ` et ${escapeHtml(currencyFormatter.format(monthly))} versés par mois (moyenne des 6 derniers mois)` : " sans nouveau versement") +
+          ` : <strong>${escapeHtml(currencyFormatter.format(in5))}</strong>. Estimation, pas une garantie.`;
+        detail.appendChild(projection);
+      }
+
+      if (state.snapshots.length) {
+        const list = document.createElement("div");
+        list.className = "mini-list";
+        for (const snap of [...state.snapshots].reverse().slice(0, 6)) {
+          const line = document.createElement("div");
+          line.className = "mini-list-row";
+          const label = document.createElement("span");
+          label.textContent = `Solde réel du ${dateFormatter.format(new Date(snap.balance_date + "T00:00:00"))} : ${currencyFormatter.format(snap.balance)}`;
+          const del = document.createElement("button");
+          del.className = "icon-btn danger";
+          del.textContent = "🗑️";
+          del.setAttribute("aria-label", "Supprimer ce solde réel");
+          del.addEventListener("click", () => deleteBalance(snap.id));
+          line.appendChild(label);
+          line.appendChild(del);
+          list.appendChild(line);
+        }
+        detail.appendChild(list);
+      }
+      card.appendChild(detail);
+      return card;
+    }
+
+    function renderAccountChart(acc, state) {
+      const canvas = document.getElementById(`chart-account-${acc.id}`);
+      const emptyEl = document.getElementById(`chart-account-empty-${acc.id}`);
+      if (!canvas) return;
+      if (accountCharts[acc.id]) {
+        accountCharts[acc.id].destroy();
+        delete accountCharts[acc.id];
+      }
+      if (state.history.length < 2) {
+        canvas.parentElement.style.display = "none";
+        emptyEl.textContent = "Pas encore assez de mouvements pour tracer une courbe.";
+        emptyEl.style.display = "block";
+        return;
+      }
+      accountCharts[acc.id] = safeCreateChart(canvas, {
+        type: "line",
+        data: {
+          labels: state.history.map((p) => dateFormatter.format(new Date(p.date + "T00:00:00"))),
+          datasets: [{
+            label: "Solde",
+            data: state.history.map((p) => p.value),
+            borderColor: CHART_COLORS[1],
+            backgroundColor: "rgba(34, 197, 94, 0.12)",
+            fill: true,
+            tension: 0.15,
+            pointRadius: 2,
+            stepped: true,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: "#9aa0ac", maxTicksLimit: 6 }, grid: { color: "#2a2e38" } },
+            y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (ctx) => currencyFormatter.format(ctx.parsed.y) } },
+          },
+        },
+      }, emptyEl);
+    }
+
+    function renderNetWorth() {
+      const canvas = document.getElementById("chart-networth");
+      const wrap = document.getElementById("networth-chart-wrap");
+      const emptyEl = document.getElementById("networth-empty");
+      const listEl = document.getElementById("networth-list");
+      if (networthChart) {
+        networthChart.destroy();
+        networthChart = null;
+      }
+      listEl.innerHTML = "";
+      const points = [...allNetWorth].sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+      if (!document.getElementById("networth-date").value) document.getElementById("networth-date").value = todayIso();
+      if (points.length === 0) {
+        wrap.style.display = "none";
+        emptyEl.style.display = "block";
+        return;
+      }
+      wrap.style.display = "block";
+      emptyEl.style.display = "none";
+      networthChart = safeCreateChart(canvas, {
+        type: "line",
+        data: {
+          labels: points.map((p) => monthShortFormatter.format(new Date(p.snapshot_date + "T00:00:00"))),
+          datasets: [
+            {
+              label: "Patrimoine net",
+              data: points.map((p) => Number(p.assets) - Number(p.debts)),
+              borderColor: CHART_COLORS[1],
+              backgroundColor: "rgba(34, 197, 94, 0.12)",
+              fill: true,
+              tension: 0.15,
+              pointRadius: 2,
+            },
+            { label: "Patrimoine", data: points.map((p) => Number(p.assets)), borderColor: CHART_COLORS[0], tension: 0.15, pointRadius: 0 },
+            { label: "Endettement", data: points.map((p) => Number(p.debts)), borderColor: CHART_COLORS[2], tension: 0.15, pointRadius: 0 },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { ticks: { color: "#9aa0ac", maxTicksLimit: 8 }, grid: { color: "#2a2e38" } },
+            y: { ticks: { color: "#9aa0ac" }, grid: { color: "#2a2e38" } },
+          },
+          plugins: {
+            legend: { labels: { color: "#e6e6e6" } },
+            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label} : ${currencyFormatter.format(ctx.parsed.y)}` } },
+          },
+        },
+      }, emptyEl);
+
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = `Voir les ${points.length} relevé(s)`;
+      details.appendChild(summary);
+      const list = document.createElement("div");
+      list.className = "mini-list";
+      for (const p of [...points].reverse()) {
+        const line = document.createElement("div");
+        line.className = "mini-list-row";
+        const label = document.createElement("span");
+        label.textContent = `${dateFormatter.format(new Date(p.snapshot_date + "T00:00:00"))} : patrimoine ${currencyFormatter.format(p.assets)}, endettement ${currencyFormatter.format(p.debts)}`;
+        const del = document.createElement("button");
+        del.className = "icon-btn danger";
+        del.textContent = "🗑️";
+        del.setAttribute("aria-label", "Supprimer ce relevé");
+        del.addEventListener("click", () => deleteNetWorthSnapshot(p.id));
+        line.appendChild(label);
+        line.appendChild(del);
+        list.appendChild(line);
+      }
+      details.appendChild(list);
+      listEl.appendChild(details);
+    }
+
+    document.getElementById("networth-add-btn").addEventListener("click", async () => {
+      const date = document.getElementById("networth-date").value;
+      const assets = parseFloat(document.getElementById("networth-assets").value);
+      const debts = parseFloat(document.getElementById("networth-debts").value || "0");
+      if (!date) { showToast("Date obligatoire", true); return; }
+      if (isNaN(assets) || assets < 0) { showToast("Patrimoine invalide", true); return; }
+      if (isNaN(debts) || debts < 0) { showToast("Endettement invalide", true); return; }
+      try {
+        await apiFetch("/api/net-worth-snapshots", {
+          method: "POST",
+          body: JSON.stringify({ snapshot_date: date, assets, debts }),
+        });
+        document.getElementById("networth-assets").value = "";
+        document.getElementById("networth-debts").value = "";
+        showToast("Relevé ajouté");
+        await loadAccounts();
+        renderWealth();
+      } catch (err) {
+        showToast("Erreur : " + err.message, true);
+      }
+    });
+
+    async function deleteNetWorthSnapshot(id) {
+      if (!(await showConfirm("Supprimer ce relevé de patrimoine ?"))) return;
+      try {
+        await apiFetch(`/api/net-worth-snapshots/${id}`, { method: "DELETE" });
+        await loadAccounts();
+        renderWealth();
+      } catch (err) {
+        showToast("Erreur : " + err.message, true);
+      }
+    }
+
+    // --- Modale compte ---
+    const accountOverlayEl = document.getElementById("account-modal-overlay");
+    const accountNameInput = document.getElementById("account-input-name");
+    const accountKindInput = document.getElementById("account-input-kind");
+    const accountRateInput = document.getElementById("account-input-rate");
+    const accountClosedInput = document.getElementById("account-input-closed");
+    const accountSaveBtn = document.getElementById("account-btn-save");
+
+    function openAccountModal(acc = null) {
+      editingAccountId = acc ? acc.id : null;
+      document.getElementById("account-modal-title").textContent = acc ? "Modifier le compte" : "Nouveau compte";
+      accountSaveBtn.textContent = acc ? "Enregistrer" : "Ajouter";
+      accountNameInput.value = acc ? acc.name : "";
+      accountKindInput.value = acc ? acc.kind : "bank";
+      accountRateInput.value = acc && acc.annual_rate_pct != null ? Number(acc.annual_rate_pct) : "";
+      accountClosedInput.checked = Boolean(acc && acc.active === false);
+      document.getElementById("account-closed-wrap").classList.toggle("hidden", !acc);
+      accountOverlayEl.classList.remove("hidden");
+      accountNameInput.focus();
+    }
+
+    function closeAccountModal() {
+      accountOverlayEl.classList.add("hidden");
+      editingAccountId = null;
+    }
+
+    document.getElementById("account-btn-cancel").addEventListener("click", closeAccountModal);
+    accountOverlayEl.addEventListener("click", (e) => { if (e.target === accountOverlayEl) closeAccountModal(); });
+
+    accountSaveBtn.addEventListener("click", async () => {
+      const name = accountNameInput.value.trim();
+      const rateRaw = accountRateInput.value.trim();
+      const rate = rateRaw === "" ? null : parseFloat(rateRaw);
+      if (!name) { showToast("Le nom du compte est obligatoire", true); return; }
+      if (rate !== null && (isNaN(rate) || rate < 0 || rate > 100)) { showToast("Taux invalide", true); return; }
+      const payload = { name, kind: accountKindInput.value, annual_rate_pct: rate };
+      if (editingAccountId) payload.active = !accountClosedInput.checked;
+      accountSaveBtn.disabled = true;
+      try {
+        if (editingAccountId) {
+          await apiFetch(`/api/accounts/${editingAccountId}`, { method: "PUT", body: JSON.stringify(payload) });
+          showToast("Compte modifié");
+        } else {
+          await apiFetch("/api/accounts", { method: "POST", body: JSON.stringify(payload) });
+          showToast("Compte ajouté");
+        }
+        closeAccountModal();
+        await loadAccounts();
+        renderWealth();
+        applyHistoryFilters();
+      } catch (err) {
+        showToast("Erreur : " + err.message, true);
+      } finally {
+        accountSaveBtn.disabled = false;
+      }
+    });
+
+    async function deleteAccount(acc) {
+      const confirmed = await showConfirm(
+        `Supprimer le compte « ${acc.name} » ? Ses dépenses et revenus sont gardés (sans compte), ` +
+        "mais les virements vers ou depuis ce compte et ses soldes réels sont supprimés. " +
+        "Pour tout garder dans l'historique, modifie-le plutôt et coche « Compte fermé »."
+      );
+      if (!confirmed) return;
+      try {
+        await apiFetch(`/api/accounts/${acc.id}`, { method: "DELETE" });
+        showToast("Compte supprimé");
+        delete accountOpenState[acc.id];
+        await loadAccounts();
+        await loadTransactions();
+        renderWealth();
+      } catch (err) {
+        showToast("Erreur : " + err.message, true);
+      }
+    }
+
+    // --- Modale solde réel ---
+    const balanceOverlayEl = document.getElementById("balance-modal-overlay");
+    const balanceAmountInput = document.getElementById("balance-input-amount");
+    const balanceDateInput = document.getElementById("balance-input-date");
+
+    function openBalanceModal(acc, state) {
+      balanceAccountId = acc.id;
+      document.getElementById("balance-modal-title").textContent = `Solde réel — ${acc.name}`;
+      document.getElementById("balance-modal-hint").textContent = state.known
+        ? `Solde calculé aujourd'hui : ${currencyFormatter.format(state.balance)}. Tape le montant affiché par ta banque ; l'écart (intérêts, gains, frais) sera pris en compte.`
+        : "Tape le montant affiché par ta banque à cette date.";
+      balanceAmountInput.value = "";
+      balanceDateInput.value = todayIso();
+      balanceOverlayEl.classList.remove("hidden");
+      balanceAmountInput.focus();
+    }
+
+    function closeBalanceModal() {
+      balanceOverlayEl.classList.add("hidden");
+      balanceAccountId = null;
+    }
+
+    document.getElementById("balance-btn-cancel").addEventListener("click", closeBalanceModal);
+    balanceOverlayEl.addEventListener("click", (e) => { if (e.target === balanceOverlayEl) closeBalanceModal(); });
+
+    document.getElementById("balance-btn-save").addEventListener("click", async () => {
+      const amount = parseFloat(balanceAmountInput.value);
+      const date = balanceDateInput.value;
+      if (isNaN(amount)) { showToast("Montant invalide", true); return; }
+      if (!date) { showToast("Date obligatoire", true); return; }
+      const btn = document.getElementById("balance-btn-save");
+      btn.disabled = true;
+      try {
+        await apiFetch(`/api/accounts/${balanceAccountId}/balances`, {
+          method: "POST",
+          body: JSON.stringify({ balance_date: date, balance: amount }),
+        });
+        showToast("Solde enregistré");
+        closeBalanceModal();
+        await loadAccounts();
+        renderWealth();
+      } catch (err) {
+        showToast("Erreur : " + err.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    async function deleteBalance(id) {
+      if (!(await showConfirm("Supprimer ce solde réel ?"))) return;
+      try {
+        await apiFetch(`/api/account-balances/${id}`, { method: "DELETE" });
+        await loadAccounts();
+        renderWealth();
       } catch (err) {
         showToast("Erreur : " + err.message, true);
       }
@@ -5672,7 +6988,15 @@
     let genericImportRows = []; // [{ ...row, selected: bool }]
     let genericImportCandidates = []; // [{ ...candidate, decision: "recurring"|"credit"|"ignore", end_date }]
     let genericImportCategoryLabels = { expense: {}, income: {} };
-    const MAX_GENERIC_IMPORT_FILE_SIZE_BYTES = 3 * 1024 * 1024; // aligné avec le backend
+    // Limites alignées avec le backend (4 Mo maximum par requête sur Vercel).
+    const IMPORT_MAX_BYTES = { csv: 3 * 1024 * 1024, xlsx: 4 * 1024 * 1024, xlsm: 4 * 1024 * 1024, pdf: 4 * 1024 * 1024 };
+    // Classeur onglet par onglet : le fichier reste en mémoire le temps de
+    // la revue (jamais envoyé ailleurs qu'à notre API), `workbookStructured`
+    // contient les prêts et l'historique de patrimoine confirmés.
+    let workbookFile = null;
+    let workbookSheets = [];
+    let workbookStructured = null; // { loans: [...], snapshots: [...] }
+    let genericImportAccountId = null; // compte du relevé au moment de l'analyse
 
     const genericDropzoneEl = document.getElementById("generic-import-dropzone");
     const genericFileInput = document.getElementById("generic-import-file-input");
@@ -5694,7 +7018,7 @@
     function updateGenericImportSelectedCount() {
       const n = genericImportRows.filter((r) => r.selected).length;
       genericSelectedCountEl.textContent = `${n} sélectionnée${n > 1 ? "s" : ""} sur ${genericImportRows.length}`;
-      document.getElementById("generic-import-commit-btn").disabled = n === 0;
+      document.getElementById("generic-import-commit-btn").disabled = n === 0 && !workbookStructured;
     }
 
     function renderGenericImportRecurringList() {
@@ -5798,6 +7122,20 @@
         amountSpan.textContent = (row.type === "expense" ? "-" : "+") + currencyFormatter.format(row.amount);
         desc.append((row.recurring_group_id ? "🔁 " : "") + (row.description || "") + " — ");
         desc.appendChild(amountSpan);
+        if (row.loan_id) {
+          const loanTag = document.createElement("span");
+          loanTag.className = "import-row-transfer";
+          const loan = allLoans.find((l) => l.id === row.loan_id);
+          loanTag.textContent = ` · mensualité de ${loan ? loan.property_name : "ton prêt"}`;
+          desc.appendChild(loanTag);
+        }
+        if (row.transfer_account_id) {
+          const transferTag = document.createElement("span");
+          transferTag.className = "import-row-transfer";
+          const otherName = accountName(row.transfer_account_id) || "un de tes comptes";
+          transferTag.textContent = row.type === "expense" ? ` · virement vers ${otherName}` : ` · virement depuis ${otherName}`;
+          desc.appendChild(transferTag);
+        }
 
         const meta = document.createElement("div");
         meta.className = "import-row-meta";
@@ -5814,16 +7152,39 @@
         main.appendChild(desc);
         main.appendChild(meta);
 
+        // Une seule liste par ligne : soit une catégorie (vraie dépense ou
+        // vrai revenu), soit "virement" vers/depuis un de tes comptes.
         const catSelect = document.createElement("select");
         const labels = row.type === "expense" ? genericImportCategoryLabels.expense : genericImportCategoryLabels.income;
         for (const [value, label] of Object.entries(labels)) {
+          if (value === TRANSFER_CATEGORY) continue;
           const opt = document.createElement("option");
           opt.value = value;
           opt.textContent = label;
-          if (value === row.category) opt.selected = true;
+          if (!row.transfer_account_id && value === row.category) opt.selected = true;
           catSelect.appendChild(opt);
         }
-        catSelect.addEventListener("change", () => { row.category = catSelect.value; });
+        for (const acc of sortedAccounts()) {
+          if (acc.active === false || acc.id === genericImportAccountId) continue;
+          const opt = document.createElement("option");
+          opt.value = `transfer:${acc.id}`;
+          opt.textContent = row.type === "expense" ? `🔁 Virement vers ${acc.name}` : `🔁 Virement depuis ${acc.name}`;
+          if (row.transfer_account_id === acc.id) opt.selected = true;
+          catSelect.appendChild(opt);
+        }
+        catSelect.addEventListener("change", () => {
+          row.categoryTouched = true;
+          if (catSelect.value.startsWith("transfer:")) {
+            row.transfer_account_id = catSelect.value.slice("transfer:".length);
+            row.category = TRANSFER_CATEGORY;
+            row.loan_id = null;
+          } else {
+            row.transfer_account_id = null;
+            row.category = catSelect.value;
+            if (row.category !== LOAN_CATEGORY) row.loan_id = null;
+          }
+          renderGenericImportPreview();
+        });
 
         el.appendChild(checkbox);
         el.appendChild(main);
@@ -5850,72 +7211,317 @@
       genericFileInput.files = dt.files;
     });
 
+    function resetImportReview() {
+      genericSummaryEl.style.display = "none";
+      genericRecurringSectionEl.classList.add("hidden");
+      genericPreviewEl.classList.add("hidden");
+      document.getElementById("workbook-sheets-section").classList.add("hidden");
+      document.getElementById("workbook-structured-summary").style.display = "none";
+      document.getElementById("workbook-commit-btn").classList.add("hidden");
+      genericImportRows = [];
+      genericImportCandidates = [];
+      workbookStructured = null;
+    }
+
+    async function postImportFile(url, file, extraFields = {}) {
+      const formData = new FormData();
+      formData.append("file", file);
+      for (const [key, value] of Object.entries(extraFields)) {
+        if (value !== null && value !== undefined && value !== "") formData.append(key, value);
+      }
+      const res = await fetch(url, { method: "POST", headers: { "X-API-Key": API_KEY }, body: formData });
+      if (res.status === 401) {
+        showLockScreen();
+        throw new Error("Session expirée, reconnecte-toi.");
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(extractErrorDetail(err, `Échec de l'analyse (${res.status})`));
+      }
+      return res.json();
+    }
+
+    // Aperçu par l'IA (relevé CSV/PDF, ou onglets d'opérations d'un classeur).
+    async function runGenericPreview(file, sheets = null) {
+      genericImportAccountId = document.getElementById("generic-import-account").value || null;
+      const data = await postImportFile("/api/import/generic", file, {
+        account_id: genericImportAccountId,
+        sheets: sheets ? JSON.stringify(sheets) : null,
+      });
+      genericImportCategoryLabels = {
+        expense: data.expense_categories || {},
+        income: data.income_categories || {},
+      };
+      genericImportRows = data.rows.map((row) => ({
+        ...row,
+        selected: !row.likely_duplicate,
+      }));
+      genericImportCandidates = (data.recurring_candidates || []).map((cand) => ({
+        ...cand,
+        decision: cand.classification === "credit" ? "credit" : cand.classification === "ended" ? "ignore" : "recurring",
+        end_date: cand.suggested_end_date || null,
+      }));
+
+      let summary = `<strong>${genericImportRows.length}</strong> opération${genericImportRows.length > 1 ? "s" : ""} détectée${genericImportRows.length > 1 ? "s" : ""} par l'IA`;
+      const transfers = genericImportRows.filter((r) => r.transfer_account_id).length;
+      if (transfers) summary += ` — dont <strong>${transfers}</strong> virement${transfers > 1 ? "s" : ""} entre tes comptes`;
+      const toConfirm = genericImportCandidates.filter((c) => c.needs_confirmation).length;
+      if (toConfirm) summary += ` — <strong>${toConfirm}</strong> motif${toConfirm > 1 ? "s" : ""} de récurrence à confirmer ci-dessous`;
+      if (!genericImportAccountId && allAccounts.length) {
+        summary += "<br>💡 Choisis « Ce relevé vient de » avant d'analyser pour rattacher ces opérations à leur compte.";
+      }
+      if (data.warnings && data.warnings.length) {
+        summary += "<br>" + data.warnings.map((w) => `⚠️ ${escapeHtml(w)}`).join("<br>");
+      }
+      genericSummaryEl.innerHTML = summary;
+      genericSummaryEl.style.display = "block";
+
+      if (genericImportCandidates.length) {
+        genericRecurringSectionEl.classList.remove("hidden");
+        renderGenericImportRecurringList();
+      }
+      genericPreviewEl.classList.remove("hidden");
+      renderGenericImportPreview();
+    }
+
     genericAnalyzeBtn.addEventListener("click", async () => {
       const file = genericFileInput.files && genericFileInput.files[0];
-      if (!file) { showToast("Choisis d'abord un fichier .csv ou .xlsx", true); return; }
-      const lowerName = file.name.toLowerCase();
-      if (!lowerName.endsWith(".csv") && !lowerName.endsWith(".xlsx")) {
-        showToast("Formats acceptés : .csv ou .xlsx", true);
+      if (!file) { showToast("Choisis d'abord un fichier (.csv, .xlsx, .xlsm ou .pdf)", true); return; }
+      const ext = (file.name.toLowerCase().match(/\.([a-z]+)$/) || [])[1];
+      if (!IMPORT_MAX_BYTES[ext]) {
+        showToast("Formats acceptés : .csv, .xlsx, .xlsm ou .pdf", true);
         return;
       }
-      if (file.size > MAX_GENERIC_IMPORT_FILE_SIZE_BYTES) {
-        showToast("Fichier trop volumineux (3 Mo maximum)", true);
+      if (file.size > IMPORT_MAX_BYTES[ext]) {
+        showToast(`Fichier trop volumineux (${IMPORT_MAX_BYTES[ext] / (1024 * 1024)} Mo maximum)`, true);
         return;
       }
 
       const originalText = genericAnalyzeBtn.textContent;
       genericAnalyzeBtn.disabled = true;
-      genericAnalyzeBtn.textContent = "Analyse en cours (IA)…";
-      genericSummaryEl.style.display = "none";
-      genericRecurringSectionEl.classList.add("hidden");
-      genericPreviewEl.classList.add("hidden");
+      resetImportReview();
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const res = await fetch("/api/import/generic", {
-          method: "POST",
-          headers: { "X-API-Key": API_KEY },
-          body: formData,
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(extractErrorDetail(err, `Échec de l'analyse (${res.status})`));
+        if (ext === "xlsx" || ext === "xlsm") {
+          genericAnalyzeBtn.textContent = "Lecture des onglets…";
+          const data = await postImportFile("/api/import/workbook/analyze", file);
+          const useful = data.sheets.filter((s) => s.filled_cells > 0);
+          const hasStructured = useful.some((s) => s.loan || s.net_worth);
+          if (useful.length > 1 || hasStructured) {
+            workbookFile = file;
+            workbookSheets = data.sheets.map((s) => ({ ...s, uiKind: s.selected ? s.kind : "ignore" }));
+            renderWorkbookSheets();
+            document.getElementById("workbook-sheets-section").classList.remove("hidden");
+            return;
+          }
         }
-        const data = await res.json();
-        genericImportCategoryLabels = {
-          expense: data.expense_categories || {},
-          income: data.income_categories || {},
-        };
-        genericImportRows = data.rows.map((row) => ({
-          ...row,
-          selected: !row.likely_duplicate,
-        }));
-        genericImportCandidates = (data.recurring_candidates || []).map((cand) => ({
-          ...cand,
-          decision: cand.classification === "credit" ? "credit" : cand.classification === "ended" ? "ignore" : "recurring",
-          end_date: cand.suggested_end_date || null,
-        }));
-
-        let summary = `<strong>${genericImportRows.length}</strong> opération${genericImportRows.length > 1 ? "s" : ""} détectée${genericImportRows.length > 1 ? "s" : ""} par l'IA`;
-        const toConfirm = genericImportCandidates.filter((c) => c.needs_confirmation).length;
-        if (toConfirm) summary += ` — <strong>${toConfirm}</strong> motif${toConfirm > 1 ? "s" : ""} de récurrence à confirmer ci-dessous`;
-        if (data.warnings && data.warnings.length) {
-          summary += "<br>" + data.warnings.map((w) => `⚠️ ${w}`).join("<br>");
-        }
-        genericSummaryEl.innerHTML = summary;
-        genericSummaryEl.style.display = "block";
-
-        if (genericImportCandidates.length) {
-          genericRecurringSectionEl.classList.remove("hidden");
-          renderGenericImportRecurringList();
-        }
-        genericPreviewEl.classList.remove("hidden");
-        renderGenericImportPreview();
+        genericAnalyzeBtn.textContent = "Analyse en cours (IA)…";
+        await runGenericPreview(file);
       } catch (err) {
         showToast("Erreur : " + err.message, true);
       } finally {
         genericAnalyzeBtn.disabled = false;
         genericAnalyzeBtn.textContent = originalText;
+      }
+    });
+
+    // --- Classeur onglet par onglet ---
+    const SHEET_KIND_LABELS = {
+      monthly: "Opérations (IA)",
+      loan: "Prêt",
+      net_worth: "Endettement",
+      ignore: "Ignorer",
+    };
+
+    function monthYearLabel(isoDate) {
+      const [y, m] = isoDate.split("-").map(Number);
+      return monthFormatter.format(new Date(y, m - 1, 1));
+    }
+
+    function describeSheet(sheet) {
+      if (sheet.uiKind === "loan" && sheet.loan) {
+        const l = sheet.loan;
+        let text = `${currencyFormatter.format(l.principal_amount)} à ${l.annual_rate_pct} % · ${currencyFormatter.format(l.monthly_payment)}/mois · 1re échéance ${monthYearLabel(l.start_date)} · reste ${currencyFormatter.format(l.remaining_today)} dû aujourd'hui`;
+        if (l.monthly_rent) text += ` · loyer ${currencyFormatter.format(l.monthly_rent)}`;
+        if (l.rebased) {
+          text += `. Différé ou pause avant ${monthYearLabel(l.start_date)} : le prêt est repris à cette date (capital d'origine ${currencyFormatter.format(l.original_principal)} dès ${monthYearLabel(l.original_start_date)}), pour que le capital restant dû calculé tombe juste.`;
+        }
+        if (l.same_name_exists && !l.already_imported) text += " Un prêt du même nom existe déjà dans l'app.";
+        return text;
+      }
+      if (sheet.uiKind === "net_worth" && sheet.net_worth) {
+        const nw = sheet.net_worth;
+        const parts = [];
+        const rents = nw.properties.filter((p) => p.monthly_rent);
+        if (rents.length) parts.push(`loyers de ${rents.length} bien(s), rattachés aux prêts du même nom`);
+        if (nw.snapshots.length) {
+          const first = nw.snapshots[0].snapshot_date;
+          const last = nw.snapshots[nw.snapshots.length - 1].snapshot_date;
+          parts.push(`${nw.snapshots.length} relevé(s) Endettement / Patrimoine du ${dateFormatter.format(new Date(first + "T00:00:00"))} au ${dateFormatter.format(new Date(last + "T00:00:00"))}`);
+        }
+        parts.push("le cumul mois par mois de tous les biens n'est pas importé (recalculé à partir des prêts)");
+        return parts.join(" · ");
+      }
+      if (sheet.uiKind === "monthly") {
+        return sheet.month
+          ? `Dépenses et revenus de ${monthYearLabel(sheet.month + "-01")}, lus par l'IA à l'étape suivante.`
+          : "Dépenses et revenus lus par l'IA à l'étape suivante.";
+      }
+      if (sheet.loan) return `Prêt détecté (${currencyFormatter.format(sheet.loan.principal_amount)}, 1re échéance ${monthYearLabel(sheet.loan.start_date)}) — non importé.`;
+      if (sheet.net_worth) return "Tableau d'endettement détecté — non importé.";
+      return sheet.filled_cells ? `${sheet.filled_cells} cellule(s) remplie(s) — non importé.` : "Onglet vide.";
+    }
+
+    function renderWorkbookSheets() {
+      const listEl = document.getElementById("workbook-sheets-list");
+      listEl.innerHTML = "";
+      for (const sheet of workbookSheets) {
+        if (!sheet.filled_cells) continue;
+        const row = document.createElement("div");
+        row.className = "sheet-row" + (sheet.uiKind === "ignore" ? " ignored" : "");
+        const head = document.createElement("div");
+        head.className = "sheet-row-head";
+        const name = document.createElement("span");
+        name.className = "sheet-row-name";
+        name.textContent = sheet.name;
+        if (sheet.hidden) {
+          const badge = document.createElement("span");
+          badge.className = "sheet-hidden-badge";
+          badge.textContent = "masqué";
+          name.appendChild(badge);
+        }
+        const select = document.createElement("select");
+        select.setAttribute("aria-label", `Contenu de l'onglet ${sheet.name}`);
+        const kinds = ["monthly", ...(sheet.loan ? ["loan"] : []), ...(sheet.net_worth ? ["net_worth"] : []), "ignore"];
+        for (const kind of kinds) {
+          const opt = document.createElement("option");
+          opt.value = kind;
+          opt.textContent = SHEET_KIND_LABELS[kind];
+          select.appendChild(opt);
+        }
+        select.value = sheet.uiKind;
+        select.addEventListener("change", () => {
+          sheet.uiKind = select.value;
+          renderWorkbookSheets();
+        });
+        head.appendChild(name);
+        head.appendChild(select);
+        row.appendChild(head);
+        const detail = document.createElement("div");
+        detail.className = "sheet-row-detail";
+        detail.textContent = describeSheet(sheet);
+        row.appendChild(detail);
+        if (sheet.note) {
+          const note = document.createElement("div");
+          note.className = "sheet-row-note";
+          note.textContent = sheet.note;
+          row.appendChild(note);
+        }
+        listEl.appendChild(row);
+      }
+    }
+
+    function buildWorkbookStructured() {
+      const loans = [];
+      const snapshots = [];
+      for (const sheet of workbookSheets) {
+        if (sheet.uiKind === "loan" && sheet.loan) {
+          const l = sheet.loan;
+          loans.push({
+            property_name: l.property_name,
+            principal_amount: l.principal_amount,
+            annual_rate_pct: l.annual_rate_pct,
+            monthly_payment: l.monthly_payment,
+            start_date: l.start_date,
+            monthly_rent: l.monthly_rent || null,
+            active: !l.finished,
+          });
+        } else if (sheet.uiKind === "net_worth" && sheet.net_worth) {
+          for (const snap of sheet.net_worth.snapshots) snapshots.push({ ...snap, label: sheet.name.slice(0, 60) });
+        }
+      }
+      return loans.length || snapshots.length ? { loans, snapshots } : null;
+    }
+
+    function describeStructured(structured) {
+      const parts = [];
+      if (structured.loans.length) {
+        parts.push(`<strong>${structured.loans.length}</strong> prêt${structured.loans.length > 1 ? "s" : ""} (${structured.loans.map((l) => escapeHtml(l.property_name)).join(", ")})`);
+      }
+      if (structured.snapshots.length) {
+        parts.push(`<strong>${structured.snapshots.length}</strong> relevé${structured.snapshots.length > 1 ? "s" : ""} d'endettement / patrimoine`);
+      }
+      return parts.join(" et ");
+    }
+
+    document.getElementById("workbook-continue-btn").addEventListener("click", async () => {
+      const monthlySheets = workbookSheets.filter((s) => s.uiKind === "monthly").map((s) => s.name);
+      const structured = buildWorkbookStructured();
+      if (!monthlySheets.length && !structured) {
+        showToast("Aucun onglet à importer : choisis le contenu d'au moins un onglet", true);
+        return;
+      }
+      const btn = document.getElementById("workbook-continue-btn");
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      try {
+        workbookStructured = structured;
+        const summaryEl = document.getElementById("workbook-structured-summary");
+        if (structured) {
+          summaryEl.innerHTML = (monthlySheets.length ? "En plus des opérations ci-dessous : " : "À importer : ") + describeStructured(structured) + ".";
+          summaryEl.style.display = "block";
+        }
+        if (monthlySheets.length) {
+          btn.textContent = "Analyse des opérations (IA)…";
+          await runGenericPreview(workbookFile, monthlySheets);
+        } else {
+          document.getElementById("workbook-commit-btn").classList.remove("hidden");
+        }
+        document.getElementById("workbook-sheets-section").classList.add("hidden");
+      } catch (err) {
+        workbookStructured = null;
+        showToast("Erreur : " + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    });
+
+    async function commitWorkbookStructured() {
+      if (!workbookStructured) return null;
+      return apiFetch("/api/import/workbook/commit", { method: "POST", body: JSON.stringify(workbookStructured) });
+    }
+
+    function describeWorkbookResult(result) {
+      const parts = [];
+      if (result.inserted_loans) parts.push(`${result.inserted_loans} prêt${result.inserted_loans > 1 ? "s" : ""}`);
+      if (result.updated_rents) parts.push(`${result.updated_rents} loyer${result.updated_rents > 1 ? "s" : ""} mis à jour`);
+      if (result.inserted_snapshots) parts.push(`${result.inserted_snapshots} relevé${result.inserted_snapshots > 1 ? "s" : ""} de patrimoine`);
+      return parts;
+    }
+
+    function finishImport() {
+      resetImportReview();
+      genericFileInput.value = "";
+      workbookFile = null;
+      workbookSheets = [];
+    }
+
+    document.getElementById("workbook-commit-btn").addEventListener("click", async () => {
+      if (!workbookStructured) return;
+      const ok = await showConfirm(`Importer ${describeStructured(workbookStructured).replace(/<[^>]+>/g, "")} ?`);
+      if (!ok) return;
+      const btn = document.getElementById("workbook-commit-btn");
+      btn.disabled = true;
+      try {
+        const result = await commitWorkbookStructured();
+        const parts = describeWorkbookResult(result);
+        showToast(parts.length ? `Importé : ${parts.join(", ")}` : "Déjà importé : rien de nouveau");
+        finishImport();
+        await Promise.all([loadLoans(), loadAccounts()]);
+      } catch (err) {
+        showToast("Erreur : " + err.message, true);
+      } finally {
+        btn.disabled = false;
       }
     });
 
@@ -5927,9 +7533,12 @@
 
     document.getElementById("generic-import-commit-btn").addEventListener("click", async () => {
       const selected = genericImportRows.filter((r) => r.selected);
-      if (selected.length === 0) return;
+      if (selected.length === 0 && !workbookStructured) return;
+      const structuredText = workbookStructured ? describeStructured(workbookStructured).replace(/<[^>]+>/g, "") : "";
       const ok = await showConfirm(
-        `Importer ${selected.length} transaction${selected.length > 1 ? "s" : ""} ? Vérifie bien les catégories et les récurrences avant de confirmer.`
+        `Importer ${selected.length} opération${selected.length > 1 ? "s" : ""}` +
+        (structuredText ? `, ainsi que ${structuredText}` : "") +
+        " ? Vérifie bien les catégories, les virements et les récurrences avant de confirmer."
       );
       if (!ok) return;
 
@@ -5950,31 +7559,44 @@
             end_date: c.decision === "credit" ? (c.end_date || null) : null,
           }));
         const payload = {
-          transactions: selected.map((r) => ({
-            expense_date: r.expense_date,
-            type: r.type,
-            amount: r.amount,
-            category: r.category,
-            description: r.description,
-          })),
+          account_id: genericImportAccountId,
+          transactions: selected.map((r) => {
+            const item = {
+              expense_date: r.expense_date,
+              type: r.type,
+              amount: r.amount,
+              category: r.category,
+              description: r.description,
+              transfer_account_id: r.transfer_account_id || null,
+            };
+            // Sans choix explicite, le serveur rattache lui-même les
+            // mensualités aux prêts (y compris ceux créés par ce même import).
+            if (r.loan_id || r.categoryTouched) item.loan_id = r.loan_id || null;
+            return item;
+          }),
           recurring: recurringPayload,
         };
-        const result = await apiFetch("/api/import/generic/commit", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
         const parts = [];
-        if (result.inserted_transactions) parts.push(`${result.inserted_transactions} transaction${result.inserted_transactions > 1 ? "s" : ""}`);
-        if (result.inserted_recurring) parts.push(`${result.inserted_recurring} charge${result.inserted_recurring > 1 ? "s" : ""} récurrente${result.inserted_recurring > 1 ? "s" : ""}`);
-        showToast(parts.length ? `Importé : ${parts.join(" et ")}` : "Import terminé");
-        genericImportRows = [];
-        genericImportCandidates = [];
-        genericPreviewEl.classList.add("hidden");
-        genericRecurringSectionEl.classList.add("hidden");
-        genericSummaryEl.style.display = "none";
-        genericFileInput.value = "";
+        // Prêts du classeur d'abord : les mensualités importées juste après
+        // peuvent ainsi y être rattachées.
+        if (workbookStructured) {
+          const wbResult = await commitWorkbookStructured();
+          parts.push(...describeWorkbookResult(wbResult));
+        }
+        if (payload.transactions.length || payload.recurring.length) {
+          const result = await apiFetch("/api/import/generic/commit", {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          if (result.inserted_transactions) parts.push(`${result.inserted_transactions} opération${result.inserted_transactions > 1 ? "s" : ""}`);
+          if (result.inserted_recurring) parts.push(`${result.inserted_recurring} charge${result.inserted_recurring > 1 ? "s" : ""} récurrente${result.inserted_recurring > 1 ? "s" : ""}`);
+        }
+        showToast(parts.length ? `Importé : ${parts.join(", ")}` : "Import terminé");
+        const hadStructured = Boolean(workbookStructured);
+        finishImport();
         await loadTransactions();
         loadRecurring();
+        if (hadStructured) await Promise.all([loadLoans(), loadAccounts()]);
       } catch (err) {
         showToast("Erreur : " + err.message, true);
       } finally {
@@ -5985,7 +7607,7 @@
 
     document.getElementById("btn-reset-all").addEventListener("click", async () => {
       const ok = await showConfirm(
-        "Supprimer DÉFINITIVEMENT toutes les données (transactions, charges récurrentes, catégories perso, budgets, suggestions ignorées) ? Cette action est irréversible."
+        "Supprimer DÉFINITIVEMENT toutes les données (opérations, charges récurrentes, catégories perso, budgets, comptes, soldes, prêts, historique de patrimoine) ? Cette action est irréversible."
       );
       if (!ok) return;
       // Double confirmation vu le caractère irréversible et complet de l'action.
@@ -6027,7 +7649,7 @@
         // Catégories perso + suggestions ignorées d'abord, pour que les
         // listes déroulantes et le bandeau soient corrects dès le premier
         // rendu plutôt que de "sauter" une fois le serveur répondu.
-        await Promise.all([loadCustomCategories(), loadDismissedSuggestions(), loadBudgets(), loadSavingsGoal(), loadCategoryRatings(), loadLoans()]);
+        await Promise.all([loadCustomCategories(), loadDismissedSuggestions(), loadBudgets(), loadSavingsGoal(), loadCategoryRatings(), loadLoans(), loadAccounts()]);
         populateFilterCategoryOptions();
         await loadTransactions();
         loadRecurring();

@@ -14,7 +14,7 @@ PARIS_TZ = ZoneInfo("Europe/Paris")
 
 TransactionType = Literal["expense", "income"]
 
-EXPENSE_CATEGORIES = {"restaurant", "courses", "transport", "logement", "loisirs", "santé", "autre"}
+EXPENSE_CATEGORIES = {"restaurant", "courses", "transport", "logement", "loisirs", "santé", "credit", "autre"}
 INCOME_CATEGORIES = {"salaire", "freelance", "remboursement", "cadeau", "autre"}
 
 # Libellés lisibles pour l'export Excel (les catégories sont stockées en base
@@ -22,7 +22,8 @@ INCOME_CATEGORIES = {"salaire", "freelance", "remboursement", "cadeau", "autre"}
 # fichier lisible par un humain, pas les codes internes).
 EXPENSE_CATEGORY_LABELS = {
     "restaurant": "Restaurant", "courses": "Courses", "transport": "Transport",
-    "logement": "Logement", "loisirs": "Loisirs", "santé": "Santé", "autre": "Autre",
+    "logement": "Logement", "loisirs": "Loisirs", "santé": "Santé", "credit": "Crédit / prêt",
+    "autre": "Autre",
 }
 INCOME_CATEGORY_LABELS = {
     "salaire": "Salaire", "freelance": "Freelance", "remboursement": "Remboursement",
@@ -69,10 +70,11 @@ ADMIN_ALERT_EMAIL = os.environ.get("ADMIN_ALERT_EMAIL", "")
 
 
 # ---------------------------------------------------------------------------
-# Réinitialisation complète (données de test) — liste des tables scopées par
-# user_id à vider/réclamer. Partagée entre /api/admin/claim-orphan-data
-# (app/routers/admin.py) et /api/reset-all + /api/export/json
-# (app/routers/admin.py et app/routers/export.py).
+# Réinitialisation complète et sauvegarde JSON — liste des tables scopées par
+# user_id, partagée entre /api/reset-all (app/routers/admin.py) et
+# /api/export/json (app/routers/export.py). L'ordre compte pour la
+# suppression : les tables qui pointent vers `accounts` (transactions,
+# account_balances) sont vidées avant `accounts` elle-même.
 # ---------------------------------------------------------------------------
 _RESET_TABLES = [
     "transactions",
@@ -83,15 +85,27 @@ _RESET_TABLES = [
     "savings_goal",
     "category_essentiality_ratings",
     "property_loans",
+    "account_balances",
+    "net_worth_snapshots",
+    "accounts",
 ]
-# UUID nil : ne correspond jamais à une ligne réelle, donc ce filtre revient
-# à "toutes les lignes" — l'API Supabase (postgrest) exige un filtre sur delete.
-_NIL_UUID = "00000000-0000-0000-0000-000000000000"
 
-# Photos de reçus : bucket Supabase Storage privé, partagé entre
-# app/routers/transactions.py (upload/téléchargement/suppression d'un reçu) et
-# app/routers/admin.py (nettoyage des reçus lors d'un reset complet).
-RECEIPTS_BUCKET = "receipts"
+# ---------------------------------------------------------------------------
+# Comptes (banques, livrets, placements)
+# ---------------------------------------------------------------------------
+# bank = compte courant ; savings = livret (Livret A, LDDS...) ; investment =
+# placement dont la valeur bouge (Bricks, PEA, assurance-vie...) ; other =
+# tout le reste (espèces, cagnotte...).
+ACCOUNT_KINDS = ("bank", "savings", "investment", "other")
+
+# Catégorie posée automatiquement sur un virement entre deux comptes de
+# l'utilisateur (ex: compte courant -> Livret A). Ces opérations ne sont ni
+# des dépenses ni des revenus : elles sont exclues de tous les totaux.
+TRANSFER_CATEGORY = "virement"
+
+# Catégorie des mensualités de prêt. Une opération de cette catégorie peut
+# être rattachée à un prêt de l'onglet Prêts (colonne transactions.loan_id).
+LOAN_CATEGORY = "credit"
 
 # Limites d'import partagées entre app/models.py (bornes des modèles Pydantic
 # *CommitRequest) et app/routers/imports.py (bornes appliquées pendant
