@@ -4,3 +4,4 @@ supabase
 anthropic
 openpyxl
 httpx
+pdfplumber

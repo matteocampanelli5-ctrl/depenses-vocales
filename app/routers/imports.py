@@ -20,6 +20,7 @@ de format propriétaire codé en dur) :
 
 import base64
 import calendar
+import io
 import json
 import re
 import unicodedata
@@ -233,6 +234,65 @@ def _mask_sensitive_numbers(text: str) -> str:
     return _LONG_NUMBER_PATTERN.sub("[n° masqué]", text)
 
 
+_PDF_DATE_WORD = re.compile(r"^\d{2}/\d{2}/\d{4}$")
+_PDF_AMOUNT_WORD = re.compile(r"^\d{1,3}(?:[ \u00a0.]\d{3})*,\d{2}$|^\d+,\d{2}$")
+
+
+def _annotate_pdf_columns(raw_bytes: bytes) -> str | None:
+    """Lit un relevé PDF avec la position de chaque mot et marque chaque
+    opération [DÉBIT] ou [CRÉDIT] selon la colonne où se trouve son montant.
+    L'IA lit mal ces deux colonnes sur l'image du PDF (elle prend des crédits
+    pour des dépenses) ; ici la décision est mécanique, donc fiable.
+    Renvoie None si le PDF n'a pas de colonnes Débit/Crédit identifiables
+    (l'ancien envoi du PDF tel quel sert alors de repli)."""
+    try:
+        import pdfplumber
+
+        lines_out: list[str] = []
+        tagged = 0
+        deb_x = cred_x = None
+        with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf:
+            for page in pdf.pages[:40]:
+                words = page.extract_words(x_tolerance=1.2, use_text_flow=False, keep_blank_chars=False)
+                # En-têtes de colonnes de la page (répétés à chaque page).
+                for w in words:
+                    low = w["text"].lower()
+                    # Le « é » sort parfois mal décodé du PDF (« DØbit ») :
+                    # n'importe quel caractère au milieu convient.
+                    if re.fullmatch(r"d.bit", low):
+                        deb_x = w["x1"]
+                    elif re.fullmatch(r"cr.dit", low):
+                        cred_x = w["x1"]
+                rows: list[list[dict]] = []
+                for w in sorted(words, key=lambda w: (round(w["top"]), w["x0"])):
+                    if rows and abs(rows[-1][0]["top"] - w["top"]) <= 3:
+                        rows[-1].append(w)
+                    else:
+                        rows.append([w])
+                for row in rows:
+                    row.sort(key=lambda w: w["x0"])
+                    text = " ".join(w["text"] for w in row).replace("Ø", "é").replace("(cid:128)", "€")
+                    if deb_x is not None and cred_x is not None and _PDF_DATE_WORD.match(row[0]["text"]):
+                        amounts = [w for w in row[1:] if _PDF_AMOUNT_WORD.match(w["text"])]
+                        if amounts:
+                            amount_word = amounts[-1]
+                            d_deb = abs(amount_word["x1"] - deb_x)
+                            d_cred = abs(amount_word["x1"] - cred_x)
+                            # Le montant doit être aligné sur une des deux
+                            # colonnes (sinon c'est une ligne d'en-tête ou
+                            # autre chose qu'une opération).
+                            if min(d_deb, d_cred) <= 40:
+                                text += "  [CRÉDIT]" if d_cred < d_deb else "  [DÉBIT]"
+                                tagged += 1
+                    lines_out.append(text)
+        if not tagged:
+            return None
+        return "\n".join(lines_out)
+    except Exception:  # noqa: BLE001 - repli sur l'envoi du PDF brut
+        return None
+
+
+
 _GENERIC_IMPORT_SYSTEM_PROMPT_TEMPLATE = """Tu reçois le contenu brut d'un fichier de suivi de finances personnelles (export Excel ou CSV), dont la structure n'est PAS standardisée — ce n'est pas forcément un relevé bancaire classique avec une colonne par champ. Il peut par exemple s'agir d'un tableau par mois (avec un titre de section indiquant le mois), sans date précise par opération, sans catégorie, juste un nom de dépense et un montant.
 
 Ta tâche : repérer TOUTES les opérations (dépenses et revenus) présentes dans ce texte et les restituer sous forme d'une liste structurée.
@@ -248,6 +308,8 @@ RÈGLES IMPORTANTES :
 - "source_label" doit rester le texte brut non modifié (utile pour une détection de motifs faite ensuite par un autre programme) ; "description" peut en revanche être nettoyé/raccourci.
 - Conserve TOUTES les opérations, y compris celles qui se répètent d'un mois à l'autre (ne les regroupe pas toi-même) : un autre programme s'occupe ensuite de détecter les récurrences.
 - Pour un relevé bancaire, une ligne au débit est une dépense ("expense") et une ligne au crédit un revenu ("income"), même pour un virement.
+- Si une ligne se termine par [DÉBIT] ou [CRÉDIT] (marqueur ajouté automatiquement d'après la colonne du montant dans le relevé), ce marqueur est FIABLE et prioritaire : [DÉBIT] = "expense", [CRÉDIT] = "income", quel que soit le libellé (un « VIR » peut être l'un ou l'autre).
+- Pour un paiement par carte dont le libellé contient « CARTE jj/mm/aa », la date de l'opération est celle du libellé (le jour réel de l'achat), pas la date d'écriture en début de ligne.
 
 COMPTES DE L'UTILISATEUR (pour repérer les virements entre ses propres comptes, par exemple "VIR LIVRET A", "virement vers Bricks", "placement") : __ACCOUNTS__
 Ne remplis "transfer_account" que si le libellé désigne clairement un de ces comptes ; dans le doute, null. Un virement vers ou depuis une autre personne n'est PAS un virement entre comptes de l'utilisateur."""
@@ -484,7 +546,8 @@ async def preview_generic_import(
     if is_pdf:
         if not raw_bytes.startswith(b"%PDF"):
             raise HTTPException(status_code=400, detail="Ce fichier n'est pas un PDF valide")
-        ai_content: str | list[dict] = [
+        annotated = _annotate_pdf_columns(raw_bytes)
+        ai_content: str | list[dict] = _mask_sensitive_numbers(annotated) if annotated else [
             {
                 "type": "document",
                 "source": {
@@ -580,6 +643,19 @@ async def preview_generic_import(
             candidate = int(day_raw)
             if 1 <= candidate <= calendar.monthrange(year, month)[1]:
                 day = candidate
+        # Paiement par carte : « CARTE 05/11/25 ... » donne le vrai jour de
+        # l'achat (la date en début de ligne est celle de l'écriture, 1 à 3
+        # jours plus tard). Décidé ici, pas par l'IA, pour être fiable.
+        card_match = re.search(r"\bCARTE\s+(\d{2})/(\d{2})/(\d{2}|\d{4})\b", str(raw.get("source_label") or ""), re.IGNORECASE)
+        if card_match:
+            try:
+                c_day, c_month, c_year = int(card_match.group(1)), int(card_match.group(2)), int(card_match.group(3))
+                if c_year < 100:
+                    c_year += 2000
+                card_date = date(c_year, c_month, c_day)
+                year, month, day = card_date.year, card_date.month, card_date.day
+            except ValueError:
+                pass
         expense_date = date(year, month, day or 1)
 
         description = str(raw.get("description") or "").strip() or "Opération importée"
