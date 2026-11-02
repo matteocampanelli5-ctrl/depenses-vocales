@@ -1560,10 +1560,11 @@
         </div>
         <div class="import-dropzone" id="generic-import-dropzone">
           <div class="import-file-row">
-            <input type="file" id="generic-import-file-input" accept=".csv,.xlsx,.xlsm,.pdf,text/csv,application/pdf">
+            <input type="file" id="generic-import-file-input" multiple accept=".csv,.xlsx,.xlsm,.pdf,text/csv,application/pdf">
             <button class="primary" id="generic-import-analyze-btn">Analyser</button>
           </div>
-          <p class="import-dropzone-hint">ou glisse-dépose un fichier .csv / .xlsx / .xlsm / .pdf ici</p>
+          <p class="import-dropzone-hint">ou glisse-dépose un ou plusieurs fichiers .csv / .xlsx / .xlsm / .pdf ici</p>
+          <p class="import-dropzone-hint">Plusieurs fichiers : ils doivent venir du même compte (choisis-le ci-dessus). Les opérations en double entre fichiers sont décochées. Pour un Excel à plusieurs onglets (prêt, patrimoine), importe-le seul.</p>
         </div>
         <div id="workbook-sheets-section" class="hidden">
           <h4 style="margin-bottom:0.25rem;">Onglets du classeur</h4>
@@ -7307,9 +7308,9 @@
 
         const meta = document.createElement("div");
         meta.className = "import-row-meta";
-        meta.textContent = row.date_precision === "day"
+        meta.textContent = (row.date_precision === "day"
           ? `${row.expense_date} · ${row.source_label}`
-          : `${row.expense_date.slice(0, 7)} (jour non précisé) · ${row.source_label}`;
+          : `${row.expense_date.slice(0, 7)} (jour non précisé) · ${row.source_label}`) + (row.fileName ? ` · 📄 ${row.fileName}` : "");
         if (row.likely_duplicate) {
           const dupSpan = document.createElement("span");
           dupSpan.className = "import-row-dup";
@@ -7378,10 +7379,10 @@
     genericDropzoneEl.addEventListener("drop", (e) => {
       e.preventDefault();
       genericDropzoneEl.classList.remove("drag-over");
-      const file = e.dataTransfer.files && e.dataTransfer.files[0];
-      if (!file) return;
+      const dropped = e.dataTransfer.files;
+      if (!dropped || !dropped.length) return;
       const dt = new DataTransfer();
-      dt.items.add(file);
+      for (const f of dropped) dt.items.add(f);
       genericFileInput.files = dt.files;
     });
 
@@ -7458,7 +7459,105 @@
       renderGenericImportPreview();
     }
 
+
+    // Import de plusieurs fichiers d'un coup (même compte) : chaque fichier
+    // est analysé l'un après l'autre, puis tout est fusionné dans un seul
+    // écran de validation. Les doublons entre fichiers sont décochés.
+    async function runBatchPreview(files, onProgress) {
+      genericImportAccountId = document.getElementById("generic-import-account").value || null;
+      const rows = [];
+      const candidates = [];
+      const warnings = [];
+      const failed = [];
+      let labels = null;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        onProgress(i + 1, files.length);
+        try {
+          const data = await postImportFile("/api/import/generic", file, { account_id: genericImportAccountId });
+          if (!labels) labels = { expense: data.expense_categories || {}, income: data.income_categories || {} };
+          for (const row of data.rows) {
+            rows.push({
+              ...row,
+              recurring_group_id: row.recurring_group_id ? `f${i}-${row.recurring_group_id}` : null,
+              fileName: file.name,
+            });
+          }
+          for (const cand of data.recurring_candidates || []) candidates.push({ ...cand, group_id: `f${i}-${cand.group_id}` });
+          for (const w of data.warnings || []) warnings.push(`${file.name} : ${w}`);
+        } catch (err) {
+          failed.push(`${file.name} (${err.message})`);
+        }
+      }
+      if (!rows.length) {
+        throw new Error(failed.length ? "Aucun fichier n'a pu être lu : " + failed.join(" ; ") : "Aucune opération trouvée");
+      }
+      // Doublons entre fichiers : la 1re occurrence reste cochée, les suivantes non.
+      const seen = new Set();
+      let crossDup = 0;
+      rows.sort((a, b) => a.expense_date.localeCompare(b.expense_date));
+      for (const row of rows) {
+        const sig = [row.expense_date, Number(row.amount).toFixed(2), row.type, (row.description || "").trim().toLowerCase()].join("|");
+        row.selected = !row.likely_duplicate;
+        if (seen.has(sig) && !row.likely_duplicate) { row.likely_duplicate = true; row.selected = false; crossDup += 1; }
+        seen.add(sig);
+      }
+      // Récurrences : une seule proposition par (type, nom, montant).
+      const candSeen = new Set();
+      const mergedCands = candidates.filter((c) => {
+        const k = [c.type, String(c.name).toLowerCase(), Number(c.amount).toFixed(2)].join("|");
+        if (candSeen.has(k)) return false;
+        candSeen.add(k); return true;
+      });
+
+      genericImportCategoryLabels = labels || { expense: {}, income: {} };
+      genericImportRows = rows;
+      genericImportCandidates = mergedCands.map((cand) => ({
+        ...cand,
+        decision: cand.classification === "credit" ? "credit" : cand.classification === "ended" ? "ignore" : "recurring",
+        end_date: cand.suggested_end_date || null,
+      }));
+
+      let summary = `<strong>${files.length - failed.length}</strong> fichier${files.length - failed.length > 1 ? "s" : ""} lu${files.length - failed.length > 1 ? "s" : ""} — <strong>${rows.length}</strong> opération${rows.length > 1 ? "s" : ""} au total`;
+      const already = rows.filter((r) => r.likely_duplicate).length;
+      if (already) summary += ` — dont <strong>${already}</strong> en double (décochées${crossDup ? `, ${crossDup} entre fichiers` : ""})`;
+      const transfers = rows.filter((r) => r.transfer_account_id).length;
+      if (transfers) summary += ` — dont <strong>${transfers}</strong> virement${transfers > 1 ? "s" : ""} entre tes comptes`;
+      if (!genericImportAccountId && allAccounts.length) summary += "<br>💡 Choisis « Ce relevé vient de » avant d'analyser pour rattacher ces opérations à leur compte.";
+      if (failed.length) summary += "<br>" + failed.map((f) => `❌ Non lu : ${escapeHtml(f)}`).join("<br>");
+      if (warnings.length) summary += "<br>" + warnings.map((w) => `⚠️ ${escapeHtml(w)}`).join("<br>");
+      genericSummaryEl.innerHTML = summary;
+      genericSummaryEl.style.display = "block";
+      if (genericImportCandidates.length) {
+        genericRecurringSectionEl.classList.remove("hidden");
+        renderGenericImportRecurringList();
+      }
+      genericPreviewEl.classList.remove("hidden");
+      renderGenericImportPreview();
+    }
+
     genericAnalyzeBtn.addEventListener("click", async () => {
+      const allFiles = Array.from(genericFileInput.files || []);
+      if (allFiles.length > 1) {
+        if (allFiles.length > 40) { showToast("40 fichiers maximum à la fois", true); return; }
+        const bad = allFiles.find((f) => {
+          const e = (f.name.toLowerCase().match(/\.([a-z]+)$/) || [])[1];
+          return !IMPORT_MAX_BYTES[e] || f.size > IMPORT_MAX_BYTES[e];
+        });
+        if (bad) { showToast(`« ${bad.name} » : format non accepté ou fichier trop volumineux`, true); return; }
+        const originalText = genericAnalyzeBtn.textContent;
+        genericAnalyzeBtn.disabled = true;
+        resetImportReview();
+        try {
+          await runBatchPreview(allFiles, (n, total) => { genericAnalyzeBtn.textContent = `Fichier ${n}/${total}…`; });
+        } catch (err) {
+          showToast("Erreur : " + err.message, true);
+        } finally {
+          genericAnalyzeBtn.disabled = false;
+          genericAnalyzeBtn.textContent = originalText;
+        }
+        return;
+      }
       const file = genericFileInput.files && genericFileInput.files[0];
       if (!file) { showToast("Choisis d'abord un fichier (.csv, .xlsx, .xlsm ou .pdf)", true); return; }
       const ext = (file.name.toLowerCase().match(/\.([a-z]+)$/) || [])[1];
@@ -7760,10 +7859,23 @@
           parts.push(...describeWorkbookResult(wbResult));
         }
         if (payload.transactions.length || payload.recurring.length) {
-          const result = await apiFetch("/api/import/generic/commit", {
-            method: "POST",
-            body: JSON.stringify(payload),
-          });
+          // Par paquets de 500 (limite du serveur : 600) ; les récurrentes
+          // partent avec le premier paquet seulement.
+          const CHUNK = 500;
+          const result = { inserted_transactions: 0, inserted_recurring: 0 };
+          const allTx = payload.transactions;
+          for (let start = 0; start === 0 || start < allTx.length; start += CHUNK) {
+            const part = await apiFetch("/api/import/generic/commit", {
+              method: "POST",
+              body: JSON.stringify({
+                account_id: payload.account_id,
+                transactions: allTx.slice(start, start + CHUNK),
+                recurring: start === 0 ? payload.recurring : [],
+              }),
+            });
+            result.inserted_transactions += part.inserted_transactions || 0;
+            result.inserted_recurring += part.inserted_recurring || 0;
+          }
           if (result.inserted_transactions) parts.push(`${result.inserted_transactions} opération${result.inserted_transactions > 1 ? "s" : ""}`);
           if (result.inserted_recurring) parts.push(`${result.inserted_recurring} charge${result.inserted_recurring > 1 ? "s" : ""} récurrente${result.inserted_recurring > 1 ? "s" : ""}`);
         }
