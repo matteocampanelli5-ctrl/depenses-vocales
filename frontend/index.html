@@ -7399,8 +7399,20 @@
     }
 
     async function postImportFile(url, file, extraFields = {}) {
+      // Sur iPhone, un fichier choisi dans « Fichiers » peut ne pas être lu
+      // tant qu'on ne l'a pas chargé en mémoire (ou être sur iCloud, pas
+      // encore téléchargé) : on le lit d'abord, puis on le renvoie sous forme
+      // de copie en mémoire, ce qui fiabilise l'envoi.
+      let safeFile = file;
+      try {
+        const buf = await file.arrayBuffer();
+        if (!buf.byteLength) throw new Error("vide");
+        safeFile = new File([buf], file.name, { type: file.type || "application/octet-stream" });
+      } catch (readErr) {
+        throw new Error("fichier illisible sur cet appareil (s'il est sur iCloud, ouvre-le d'abord dans Fichiers pour le télécharger)");
+      }
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", safeFile, safeFile.name);
       for (const [key, value] of Object.entries(extraFields)) {
         if (value !== null && value !== undefined && value !== "") formData.append(key, value);
       }
