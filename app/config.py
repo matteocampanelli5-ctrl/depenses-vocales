@@ -58,6 +58,9 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 # l'opération elle-même n'est jamais bloquée (le lien utile est toujours
 # renvoyé dans la réponse de l'API en secours).
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+# Secret des tâches planifiées Vercel (Cron) : Vercel l'envoie lui-même dans
+# l'en-tête Authorization quand la variable existe sur le projet.
+CRON_SECRET = os.environ.get("CRON_SECRET", "")
 RESEND_FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "Kaching <onboarding@resend.dev>")
 # URL publique de l'appli (ex: https://kaching.vercel.app, SANS slash final),
 # utilisée pour construire les liens envoyés par email.
@@ -85,6 +88,8 @@ _RESET_TABLES = [
     "savings_goal",
     "category_essentiality_ratings",
     "property_loans",
+    "investment_projects",
+    "category_rules",
     "account_balances",
     "net_worth_snapshots",
     "accounts",

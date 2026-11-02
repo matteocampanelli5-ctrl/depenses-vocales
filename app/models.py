@@ -84,12 +84,15 @@ class AccountIn(BaseModel):
     # Taux annuel attendu, utile pour la projection d'un livret ou d'un
     # placement (ex: Livret A). Facultatif.
     annual_rate_pct: float | None = Field(default=None, ge=0, le=100)
+    # Plafond de dépôt (ex: 22 950 € pour un Livret A). Facultatif.
+    ceiling: float | None = Field(default=None, ge=0, le=100_000_000)
 
 
 class AccountUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=60)
     kind: AccountKind | None = None
     annual_rate_pct: float | None = Field(default=None, ge=0, le=100)
+    ceiling: float | None = Field(default=None, ge=0, le=100_000_000)
     active: bool | None = None
 
 
@@ -263,6 +266,11 @@ class VoiceConfirmRequest(BaseModel):
 # Import générique par IA (tout fichier .csv/.xlsx, structure quelconque)
 # ---------------------------------------------------------------------------
 class GenericImportCommitTransaction(BaseModel):
+    # Libellé d'origine de la ligne dans le relevé, et "learn_rule" : vrai
+    # quand l'utilisateur a corrigé la catégorie proposée — on mémorise alors
+    # la correspondance libellé -> catégorie pour les prochains imports.
+    source_label: str | None = Field(default=None, max_length=300)
+    learn_rule: bool = False
     expense_date: date
     type: TransactionType
     amount: float = Field(gt=0)
@@ -304,3 +312,37 @@ class WorkbookCommitRequest(BaseModel):
     loans: list[WorkbookLoanIn] = Field(default_factory=list, max_length=50)
     snapshots: list[NetWorthSnapshotIn] = Field(default_factory=list, max_length=2000)
 
+
+
+# ---------------------------------------------------------------------------
+# Projets de placement (ex : les projets Bricks) et préférences
+# ---------------------------------------------------------------------------
+InvestmentProjectStatus = Literal["active", "finished"]
+
+
+class InvestmentProjectIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    account_id: UUID | None = None
+    invested_amount: float = Field(gt=0, le=100_000_000)
+    # Rendement annuel attendu du projet, en %.
+    annual_rate_pct: float = Field(ge=0, le=100)
+    start_date: date
+    duration_months: int = Field(ge=1, le=600)
+    # Intérêts déjà perçus sur ce projet (facultatif).
+    received_amount: float = Field(default=0, ge=0, le=100_000_000)
+    status: InvestmentProjectStatus = "active"
+
+
+class InvestmentProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    account_id: UUID | None = None
+    invested_amount: float | None = Field(default=None, gt=0, le=100_000_000)
+    annual_rate_pct: float | None = Field(default=None, ge=0, le=100)
+    start_date: date | None = None
+    duration_months: int | None = Field(default=None, ge=1, le=600)
+    received_amount: float | None = Field(default=None, ge=0, le=100_000_000)
+    status: InvestmentProjectStatus | None = None
+
+
+class PreferencesIn(BaseModel):
+    monthly_summary: bool

@@ -596,6 +596,22 @@
   .savings-section.visible { display: block; }
   .help-section { display: none; }
   .help-section.visible { display: block; }
+  .today-section { display: none; }
+  .today-section.visible { display: block; }
+  .today-alert { border-left: 4px solid var(--accent); background: var(--surface); border-radius: 10px; padding: 0.6rem 0.8rem; margin: 0.4rem 0; font-size: 0.93rem; }
+  .today-alert.warn { border-left-color: #f59e0b; }
+  .today-alert.bad { border-left-color: var(--danger); }
+  .today-alert.good { border-left-color: var(--success); }
+  .today-row { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.35rem 0; border-bottom: 1px solid var(--border); font-size: 0.93rem; }
+  .today-row:last-child { border-bottom: 0; }
+  .today-big { font-size: 1.9rem; font-weight: 700; margin: 0.1rem 0; }
+  .progress-bar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin: 0.3rem 0; }
+  .progress-bar > span { display: block; height: 100%; background: var(--accent); }
+  .progress-bar.warn > span { background: #f59e0b; }
+  .progress-bar.bad > span { background: var(--danger); }
+  .project-card { background: var(--surface); border-radius: var(--radius); padding: 0.75rem 0.9rem; margin: 0.5rem 0; border-left: 4px solid var(--accent); }
+  .project-card.finished { opacity: 0.65; }
+  .sim-card input, .sim-card select { margin: 0.25rem 0; }
   .loans-section { display: none; }
   .loans-section.visible { display: block; }
   .wealth-section { display: none; }
@@ -1298,6 +1314,7 @@
   </header>
 
   <div class="tabs">
+    <button type="button" class="tab-btn" id="tab-today" data-view="today">🏠 Aujourd'hui</button>
     <button type="button" class="tab-btn active" id="tab-history" data-view="history">Historique</button>
     <button type="button" class="tab-btn" id="tab-dashboard" data-view="dashboard">Tableau de bord</button>
     <button type="button" class="tab-btn" id="tab-recurring" data-view="recurring">Récurrentes</button>
@@ -1333,6 +1350,10 @@
   <div id="category-suggestion-banner" class="category-suggestion hidden"></div>
 
   <main>
+    <section id="view-today" class="today-section">
+      <div id="today-root"></div>
+    </section>
+
     <section id="view-history">
       <div class="filter-bar">
         <input type="text" id="filter-search" placeholder="Rechercher...">
@@ -1696,6 +1717,18 @@
         Prêts) sont déduits du patrimoine net.
       </p>
       <div id="wealth-accounts"></div>
+      <div class="dashboard-row" id="projects-row">
+        <h3>Projets de placement (Bricks…)</h3>
+        <p class="recurring-hint">
+          Chaque projet a son montant investi, son rendement et sa durée. Le solde
+          « Solde réel » de ton compte Bricks correspond à l'argent disponible sur
+          l'appli ; le capital engagé dans les projets en cours s'y ajoute
+          automatiquement dans ton patrimoine.
+        </p>
+        <div class="loans-totals" id="projects-totals"></div>
+        <div id="projects-list"></div>
+        <button class="secondary" id="project-add-btn">+ Ajouter un projet</button>
+      </div>
       <div id="wealth-empty-state" class="empty-state" style="display:none;">
         Aucun compte pour l'instant — appuie sur + pour ajouter ta banque, ton
         Livret A, Bricks…
@@ -1732,6 +1765,13 @@
       </p>
       <div class="loans-totals" id="loans-totals"></div>
       <div id="loans-list"></div>
+      <div class="dashboard-row sim-card" id="prepay-sim" style="display:none;">
+        <h3>Simulateur de remboursement anticipé</h3>
+        <p class="recurring-hint">Et si je remboursais d'un coup une somme sur un prêt, en gardant la même mensualité ?</p>
+        <select id="prepay-loan" aria-label="Prêt"></select>
+        <input type="number" id="prepay-amount" placeholder="Somme remboursée d'un coup (€)" min="0" step="1" inputmode="decimal">
+        <div id="prepay-result" class="recurring-hint"></div>
+      </div>
       <div id="loans-empty-state" class="empty-state" style="display:none;">
         Aucun prêt pour l'instant — appuie sur + pour en ajouter un.
       </div>
@@ -1743,7 +1783,17 @@
         <button type="button" data-theme-value="dark">🌙 Sombre</button>
         <button type="button" data-theme-value="rose">🌸 Rose doux</button>
       </div>
-      <p class="recurring-hint">
+      <h3 style="margin:0 0 0.25rem;">⚙️ Préférences</h3>
+      <div class="checkbox-row"><label><input type="checkbox" id="pref-monthly-summary"> Recevoir un bilan du mois par email (le 1er de chaque mois)</label></div>
+      <div id="rules-block">
+        <h3 style="margin:1rem 0 0.25rem;">🧠 Catégories apprises</h3>
+        <p class="recurring-hint">Quand tu corriges une catégorie pendant un import, l'appli s'en souvient pour les prochains relevés.</p>
+        <div id="rules-list"></div>
+      </div>
+      <h3 style="margin:1rem 0 0.25rem;">💾 Sauvegarde</h3>
+      <p class="recurring-hint">Télécharge une copie complète de tes données (à garder au chaud).</p>
+      <button class="secondary" id="backup-btn">Télécharger ma sauvegarde</button>
+      <p class="recurring-hint" style="margin-top:1.25rem;">
         Toutes les fonctionnalités de l'appli, expliquées pas à pas. Appuie
         sur une question pour voir le chemin à suivre.
       </p>
@@ -1922,12 +1972,41 @@
         <label for="account-input-rate">Taux annuel attendu (%, optionnel)</label>
         <input type="number" id="account-input-rate" step="0.01" min="0" max="100" inputmode="decimal" placeholder="Ex : 1.7">
       </div>
+      <div>
+        <label for="account-input-ceiling">Plafond de dépôt (€, optionnel)</label>
+        <input type="number" id="account-input-ceiling" step="1" min="0" inputmode="decimal" placeholder="Ex : 22950 pour un Livret A">
+      </div>
       <div id="account-closed-wrap" class="checkbox-row hidden">
         <label><input type="checkbox" id="account-input-closed"> Compte fermé (gardé dans l'historique)</label>
       </div>
       <div class="modal-actions">
         <button class="secondary" id="account-btn-cancel">Annuler</button>
         <button class="primary" id="account-btn-save">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="project-modal-overlay">
+    <div class="modal">
+      <h2 id="project-modal-title">Nouveau projet</h2>
+      <div><label for="project-input-name">Nom</label>
+        <input type="text" id="project-input-name" maxlength="80" placeholder="Ex : Bricks — Lyon Part-Dieu"></div>
+      <div><label for="project-input-account">Compte</label>
+        <select id="project-input-account"><option value="">Aucun</option></select></div>
+      <div><label for="project-input-amount">Montant investi (€)</label>
+        <input type="number" id="project-input-amount" step="0.01" min="0.01" inputmode="decimal"></div>
+      <div><label for="project-input-rate">Rendement annuel (%)</label>
+        <input type="number" id="project-input-rate" step="0.01" min="0" inputmode="decimal"></div>
+      <div><label for="project-input-start">Date de début</label>
+        <input type="date" id="project-input-start"></div>
+      <div><label for="project-input-duration">Durée (mois)</label>
+        <input type="number" id="project-input-duration" step="1" min="1" inputmode="numeric"></div>
+      <div><label for="project-input-received">Intérêts déjà reçus (€, optionnel)</label>
+        <input type="number" id="project-input-received" step="0.01" min="0" inputmode="decimal"></div>
+      <div class="checkbox-row"><label><input type="checkbox" id="project-input-finished"> Projet terminé (capital récupéré)</label></div>
+      <div class="modal-actions">
+        <button class="secondary" id="project-btn-cancel">Annuler</button>
+        <button class="primary" id="project-btn-save">Ajouter</button>
       </div>
     </div>
   </div>
@@ -3603,6 +3682,8 @@
     // -------------------------------------------------------------------
     function switchView(view) {
       currentView = view;
+      document.getElementById("tab-today").classList.toggle("active", view === "today");
+      document.getElementById("view-today").classList.toggle("visible", view === "today");
       document.getElementById("tab-history").classList.toggle("active", view === "history");
       document.getElementById("tab-dashboard").classList.toggle("active", view === "dashboard");
       document.getElementById("tab-recurring").classList.toggle("active", view === "recurring");
@@ -3619,6 +3700,7 @@
       document.getElementById("view-loans").classList.toggle("visible", view === "loans");
       document.getElementById("view-wealth").classList.toggle("visible", view === "wealth");
       document.getElementById("view-help").classList.toggle("visible", view === "help");
+      if (view === "today") renderToday();
       if (view === "dashboard") renderDashboard(allTransactions);
       if (view === "savings") renderSavings(allTransactions);
       if (view === "loans") renderLoans();
@@ -3627,6 +3709,7 @@
       closeNavDrawer();
     }
 
+    document.getElementById("tab-today").addEventListener("click", () => switchView("today"));
     document.getElementById("tab-history").addEventListener("click", () => switchView("history"));
     document.getElementById("tab-dashboard").addEventListener("click", () => switchView("dashboard"));
     document.getElementById("tab-recurring").addEventListener("click", () => switchView("recurring"));
@@ -6016,6 +6099,7 @@
     }
 
     function renderLoans() {
+      renderPrepaySim();
       const listEl = document.getElementById("loans-list");
       const emptyEl = document.getElementById("loans-empty-state");
       const totalsEl = document.getElementById("loans-totals");
@@ -6516,6 +6600,8 @@
         if (state.known) assets += state.balance;
         else unknownCount += 1;
       }
+      const projectsTotal = projectsCapital();
+      assets += projectsTotal;
       const debts = loansRemainingTotal();
 
       const mkTotal = (label, value, hint, cls = "") => {
@@ -6528,7 +6614,7 @@
       totalsEl.appendChild(mkTotal(
         "Comptes et placements",
         currencyFormatter.format(assets),
-        unknownCount ? `${unknownCount} compte(s) sans solde renseigné ne sont pas comptés` : ""
+[unknownCount ? `${unknownCount} compte(s) sans solde renseigné ne sont pas comptés` : "", projectsTotal ? `dont ${currencyFormatter.format(projectsTotal)} engagés dans des projets de placement` : ""].filter(Boolean).join(" — ")
       ));
       totalsEl.appendChild(mkTotal("Prêts restant dus", currencyFormatter.format(debts)));
       totalsEl.appendChild(mkTotal("Patrimoine net", currencyFormatter.format(assets - debts), "", assets - debts >= 0 ? "positive" : "negative"));
@@ -6545,6 +6631,7 @@
       for (const acc of allAccounts) {
         if (accountOpenState[acc.id]) renderAccountChart(acc, states[acc.id]);
       }
+      renderProjects();
       renderNetWorth();
     }
 
@@ -6615,6 +6702,33 @@
       }
       card.appendChild(balanceEl);
       card.appendChild(statusEl);
+
+      const engaged = projectsCapital(acc.id);
+      if (engaged > 0) {
+        const pe = document.createElement("div");
+        pe.className = "account-card-status";
+        pe.textContent = `+ ${currencyFormatter.format(engaged)} engagés dans des projets → valeur totale ${currencyFormatter.format((state.known ? state.balance : 0) + engaged)}`;
+        card.appendChild(pe);
+      }
+      if (acc.ceiling != null && Number(acc.ceiling) > 0 && state.known) {
+        const ratio = state.balance / Number(acc.ceiling);
+        const bar = document.createElement("div");
+        bar.className = "progress-bar" + (ratio >= 1 ? " bad" : ratio >= 0.9 ? " warn" : "");
+        bar.innerHTML = `<span style="width:${Math.min(100, Math.max(0, ratio * 100))}%"></span>`;
+        card.appendChild(bar);
+        const cs = document.createElement("div");
+        cs.className = "account-card-status";
+        const room = Number(acc.ceiling) - state.balance;
+        cs.textContent = room > 0 ? `Plafond ${currencyFormatter.format(Number(acc.ceiling))} — il reste ${currencyFormatter.format(room)} de place` : "Plafond atteint";
+        card.appendChild(cs);
+      }
+      if (acc.annual_rate_pct != null && state.known && state.balance > 0 && acc.kind === "savings") {
+        const est = state.balance * Number(acc.annual_rate_pct) / 100;
+        const es = document.createElement("div");
+        es.className = "account-card-status";
+        es.textContent = `Intérêts estimés : ≈ ${currencyFormatter.format(est)}/an (${currencyFormatter.format(est / 12)}/mois)`;
+        card.appendChild(es);
+      }
 
       const row = document.createElement("div");
       row.className = "account-card-actions-row";
@@ -6841,6 +6955,7 @@
       accountNameInput.value = acc ? acc.name : "";
       accountKindInput.value = acc ? acc.kind : "bank";
       accountRateInput.value = acc && acc.annual_rate_pct != null ? Number(acc.annual_rate_pct) : "";
+      document.getElementById("account-input-ceiling").value = acc && acc.ceiling != null ? Number(acc.ceiling) : "";
       accountClosedInput.checked = Boolean(acc && acc.active === false);
       document.getElementById("account-closed-wrap").classList.toggle("hidden", !acc);
       accountOverlayEl.classList.remove("hidden");
@@ -6861,7 +6976,10 @@
       const rate = rateRaw === "" ? null : parseFloat(rateRaw);
       if (!name) { showToast("Le nom du compte est obligatoire", true); return; }
       if (rate !== null && (isNaN(rate) || rate < 0 || rate > 100)) { showToast("Taux invalide", true); return; }
-      const payload = { name, kind: accountKindInput.value, annual_rate_pct: rate };
+      const ceilingRaw = document.getElementById("account-input-ceiling").value.trim();
+      const ceiling = ceilingRaw === "" ? null : parseFloat(ceilingRaw);
+      if (ceiling !== null && (isNaN(ceiling) || ceiling < 0)) { showToast("Plafond invalide", true); return; }
+      const payload = { name, kind: accountKindInput.value, annual_rate_pct: rate, ceiling };
       if (editingAccountId) payload.active = !accountClosedInput.checked;
       accountSaveBtn.disabled = true;
       try {
@@ -7197,6 +7315,12 @@
           dupSpan.className = "import-row-dup";
           dupSpan.textContent = " · déjà présente ?";
           meta.appendChild(dupSpan);
+        }
+        if (row.rule_applied) {
+          const ruleSpan = document.createElement("span");
+          ruleSpan.className = "import-row-transfer";
+          ruleSpan.textContent = " · 🧠 catégorie apprise";
+          meta.appendChild(ruleSpan);
         }
 
         main.appendChild(desc);
@@ -7618,6 +7742,8 @@
               category: r.category,
               description: r.description,
               transfer_account_id: r.transfer_account_id || null,
+              source_label: r.source_label || null,
+              learn_rule: Boolean(r.categoryTouched && !r.transfer_account_id && r.category !== LOAN_CATEGORY),
             };
             // Sans choix explicite, le serveur rattache lui-même les
             // mensualités aux prêts (y compris ceux créés par ce même import).
@@ -7695,14 +7821,407 @@
     // requête échouerait juste avec une 401 à la place de montrer le verrou.
     if (API_KEY && !inviteTokenFromUrl && !resetTokenFromUrl) {
       showApp();
+
+    // ======================================================================
+    // Usage quotidien : projets de placement, écran « Aujourd'hui », règles
+    // ======================================================================
+    let allProjects = [];
+
+    async function loadProjects() {
+      try { allProjects = await apiFetch("/api/investment-projects"); }
+      catch (err) { allProjects = []; }
+    }
+
+    function addMonthsIso(iso, n) {
+      const [y, m, d] = iso.split("-").map(Number);
+      const dt = new Date(Date.UTC(y, m - 1 + n, 1));
+      const last = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+      dt.setUTCDate(Math.min(d, last));
+      return dt.toISOString().slice(0, 10);
+    }
+
+    function monthsBetweenIso(a, b) {
+      const [y1, m1, d1] = a.split("-").map(Number);
+      const [y2, m2, d2] = b.split("-").map(Number);
+      return (y2 - y1) * 12 + (m2 - m1) + (d2 - d1) / 30;
+    }
+
+    function projectState(p) {
+      const today = todayIso();
+      const endDate = addMonthsIso(p.start_date, Number(p.duration_months));
+      const elapsed = Math.max(0, Math.min(Number(p.duration_months), monthsBetweenIso(p.start_date, today)));
+      const invested = Number(p.invested_amount);
+      const rate = Number(p.annual_rate_pct);
+      const expected = invested * rate / 100 * Number(p.duration_months) / 12;
+      const accrued = invested * rate / 100 * elapsed / 12;
+      const finished = p.status === "finished";
+      const matured = !finished && today >= endDate;
+      return { endDate, elapsed, expected, accrued, progress: Number(p.duration_months) ? elapsed / Number(p.duration_months) : 0, finished, matured };
+    }
+
+    function activeProjects() { return allProjects.filter((p) => p.status !== "finished"); }
+    function projectsCapital(accId) {
+      return activeProjects()
+        .filter((p) => accId === undefined || p.account_id === accId)
+        .reduce((sum, p) => sum + Number(p.invested_amount), 0);
+    }
+
+    function renderProjects() {
+      const listEl = document.getElementById("projects-list");
+      const totalsEl = document.getElementById("projects-totals");
+      if (!listEl) return;
+      listEl.innerHTML = "";
+      totalsEl.innerHTML = "";
+      const act = activeProjects();
+      if (allProjects.length === 0) {
+        listEl.innerHTML = '<p class="recurring-hint">Aucun projet pour l\'instant.</p>';
+        return;
+      }
+      const capital = act.reduce((t, p) => t + Number(p.invested_amount), 0);
+      const expected = act.reduce((t, p) => t + projectState(p).expected, 0);
+      const accrued = act.reduce((t, p) => t + projectState(p).accrued, 0);
+      const avgRate = capital ? act.reduce((t, p) => t + Number(p.invested_amount) * Number(p.annual_rate_pct), 0) / capital : 0;
+      const mk = (label, value) => {
+        const c = document.createElement("div");
+        c.className = "stat-card";
+        c.innerHTML = `<p class="label">${escapeHtml(label)}</p><p class="value">${escapeHtml(value)}</p>`;
+        totalsEl.appendChild(c);
+      };
+      mk("Capital investi", currencyFormatter.format(capital));
+      mk("Rendement moyen", `${formatRate(avgRate)} %/an`);
+      mk("Intérêts courus", currencyFormatter.format(accrued));
+      mk("Intérêts attendus (total)", currencyFormatter.format(expected));
+      const sorted = [...allProjects].sort((a, b) => projectState(a).endDate.localeCompare(projectState(b).endDate));
+      for (const p of sorted) {
+        const st = projectState(p);
+        const card = document.createElement("div");
+        card.className = "project-card" + (st.finished ? " finished" : "");
+        const acc = p.account_id ? accountName(p.account_id) : "";
+        const pct = Math.round(Math.min(1, st.progress) * 100);
+        card.innerHTML =
+          `<div class="account-card-head"><div><div class="account-card-name">${escapeHtml(p.name)}${st.finished ? " (terminé)" : ""}</div>` +
+          `<div class="account-card-kind">${escapeHtml(currencyFormatter.format(Number(p.invested_amount)))} · ${escapeHtml(formatRate(p.annual_rate_pct))} %/an · ${escapeHtml(String(p.duration_months))} mois${acc ? " · " + escapeHtml(acc) : ""}</div></div>` +
+          `<div class="tx-actions"><button class="icon-btn" data-act="edit" aria-label="Modifier le projet">✏️</button><button class="icon-btn danger" data-act="del" aria-label="Supprimer le projet">🗑️</button></div></div>` +
+          (st.finished ? "" : `<div class="progress-bar"><span style="width:${pct}%"></span></div>`) +
+          `<div class="account-card-status">${st.finished ? "Terminé" : st.matured ? "⏰ Échéance atteinte le " + escapeHtml(st.endDate) + " — pense à passer le projet en « terminé » et à remettre le capital sur ton solde" : pct + " % écoulé · fin le " + escapeHtml(st.endDate)}` +
+          ` · intérêts courus ≈ ${escapeHtml(currencyFormatter.format(st.accrued))} / ${escapeHtml(currencyFormatter.format(st.expected))}` +
+          (Number(p.received_amount) ? ` · déjà reçus ${escapeHtml(currencyFormatter.format(Number(p.received_amount)))}` : "") + `</div>`;
+        card.querySelector('[data-act="edit"]').addEventListener("click", () => openProjectModal(p));
+        card.querySelector('[data-act="del"]').addEventListener("click", async () => {
+          if (!(await showConfirm(`Supprimer le projet « ${p.name} » ?`))) return;
+          try { await apiFetch(`/api/investment-projects/${p.id}`, { method: "DELETE" }); await loadProjects(); renderWealth(); showToast("Projet supprimé"); }
+          catch (err) { showToast("Erreur : " + err.message, true); }
+        });
+        listEl.appendChild(card);
+      }
+    }
+
+    let editingProjectId = null;
+    function openProjectModal(p = null) {
+      editingProjectId = p ? p.id : null;
+      document.getElementById("project-modal-title").textContent = p ? "Modifier le projet" : "Nouveau projet";
+      document.getElementById("project-btn-save").textContent = p ? "Enregistrer" : "Ajouter";
+      const sel = document.getElementById("project-input-account");
+      sel.innerHTML = '<option value="">Aucun</option>';
+      for (const acc of sortedAccounts()) {
+        if (acc.active === false) continue;
+        const o = document.createElement("option");
+        o.value = acc.id; o.textContent = acc.name;
+        sel.appendChild(o);
+      }
+      const firstInvest = allAccounts.find((a) => a.kind === "investment" && a.active !== false);
+      sel.value = p ? (p.account_id || "") : (firstInvest ? firstInvest.id : "");
+      document.getElementById("project-input-name").value = p ? p.name : "";
+      document.getElementById("project-input-amount").value = p ? p.invested_amount : "";
+      document.getElementById("project-input-rate").value = p ? p.annual_rate_pct : "";
+      document.getElementById("project-input-start").value = p ? p.start_date : todayIso();
+      document.getElementById("project-input-duration").value = p ? p.duration_months : "";
+      document.getElementById("project-input-received").value = p && Number(p.received_amount) ? p.received_amount : "";
+      document.getElementById("project-input-finished").checked = Boolean(p && p.status === "finished");
+      document.getElementById("project-modal-overlay").classList.remove("hidden");
+    }
+    function closeProjectModal() { document.getElementById("project-modal-overlay").classList.add("hidden"); editingProjectId = null; }
+    document.getElementById("project-add-btn").addEventListener("click", () => openProjectModal());
+    document.getElementById("project-btn-cancel").addEventListener("click", closeProjectModal);
+    document.getElementById("project-btn-save").addEventListener("click", async () => {
+      const name = document.getElementById("project-input-name").value.trim();
+      const amount = parseFloat(document.getElementById("project-input-amount").value);
+      const rate = parseFloat(document.getElementById("project-input-rate").value);
+      const start = document.getElementById("project-input-start").value;
+      const duration = parseInt(document.getElementById("project-input-duration").value, 10);
+      const receivedRaw = document.getElementById("project-input-received").value.trim();
+      if (!name || !(amount > 0) || isNaN(rate) || rate < 0 || !start || !(duration >= 1)) {
+        showToast("Remplis le nom, le montant, le rendement, la date et la durée", true);
+        return;
+      }
+      const payload = {
+        name, account_id: document.getElementById("project-input-account").value || null,
+        invested_amount: amount, annual_rate_pct: rate, start_date: start, duration_months: duration,
+        received_amount: receivedRaw === "" ? 0 : parseFloat(receivedRaw) || 0,
+        status: document.getElementById("project-input-finished").checked ? "finished" : "active",
+      };
+      const btn = document.getElementById("project-btn-save");
+      btn.disabled = true;
+      try {
+        if (editingProjectId) await apiFetch(`/api/investment-projects/${editingProjectId}`, { method: "PUT", body: JSON.stringify(payload) });
+        else await apiFetch("/api/investment-projects", { method: "POST", body: JSON.stringify(payload) });
+        closeProjectModal();
+        await loadProjects();
+        renderWealth();
+        showToast("Projet enregistré");
+      } catch (err) { showToast("Erreur : " + err.message, true); }
+      finally { btn.disabled = false; }
+    });
+
+    // ---- Simulateur de remboursement anticipé
+    function simulatePrepay(loan, extra) {
+      const schedule = computeLoanAmortization(loan);
+      const state = loanStateAsOf(schedule, loan, todayIso());
+      const r = Number(loan.annual_rate_pct) / 100 / 12;
+      const pay = Number(loan.monthly_payment);
+      const run = (balance) => {
+        let months = 0, interest = 0;
+        while (balance > 0.005 && months < 1200) {
+          const i = balance * r;
+          if (pay <= i) return null;
+          interest += i; balance = balance + i - pay; months += 1;
+        }
+        return { months, interest };
+      };
+      const base = run(state.remaining);
+      const after = run(Math.max(0, state.remaining - extra));
+      return { remaining: state.remaining, base, after };
+    }
+
+    function renderPrepaySim() {
+      const box = document.getElementById("prepay-sim");
+      const live = allLoans.filter((l) => l.active !== false && loanStateAsOf(computeLoanAmortization(l), l, todayIso()).remaining > 0 && !loanStateAsOf(computeLoanAmortization(l), l, todayIso()).finished);
+      box.style.display = live.length ? "block" : "none";
+      if (!live.length) return;
+      const sel = document.getElementById("prepay-loan");
+      const prev = sel.value;
+      sel.innerHTML = "";
+      for (const l of live) { const o = document.createElement("option"); o.value = l.id; o.textContent = l.property_name; sel.appendChild(o); }
+      if (live.some((l) => l.id === prev)) sel.value = prev;
+      updatePrepayResult();
+    }
+    function updatePrepayResult() {
+      const out = document.getElementById("prepay-result");
+      const loan = allLoans.find((l) => l.id === document.getElementById("prepay-loan").value);
+      const extra = parseFloat(document.getElementById("prepay-amount").value);
+      if (!loan || !(extra > 0)) { out.textContent = ""; return; }
+      const sim = simulatePrepay(loan, extra);
+      if (!sim.base || !sim.after) { out.textContent = "Simulation impossible avec ces données (mensualité trop faible)."; return; }
+      const saved = sim.base.interest - sim.after.interest;
+      const monthsSaved = sim.base.months - sim.after.months;
+      out.innerHTML = `Capital restant : <strong>${escapeHtml(currencyFormatter.format(sim.remaining))}</strong>. En remboursant ${escapeHtml(currencyFormatter.format(extra))} maintenant, tu économises environ <strong>${escapeHtml(currencyFormatter.format(saved))}</strong> d'intérêts et le prêt se termine <strong>${monthsSaved} mois plus tôt</strong>. ` +
+        "Compare avec ce que cet argent te rapporterait ailleurs (livret, Bricks…) et vérifie les éventuelles indemnités de remboursement anticipé.";
+    }
+    document.getElementById("prepay-loan").addEventListener("change", updatePrepayResult);
+    document.getElementById("prepay-amount").addEventListener("input", updatePrepayResult);
+
+    // ---- Écran « Aujourd'hui »
+    function daysInMonthOf(iso) {
+      const [y, m] = iso.split("-").map(Number);
+      return new Date(y, m, 0).getDate();
+    }
+
+    function normalizeLabel(text) {
+      return String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 3).join(" ");
+    }
+
+    function detectSubscriptions() {
+      const groups = {};
+      for (const tx of allTransactions) {
+        if ((tx.type || "expense") !== "expense" || tx.category === TRANSFER_CATEGORY || tx.transfer_account_id) continue;
+        const key = normalizeLabel(tx.description);
+        if (!key) continue;
+        (groups[key] = groups[key] || []).push(tx);
+      }
+      const known = new Set(allRecurring.map((r) => normalizeLabel(r.name)));
+      const found = [];
+      for (const [key, txs] of Object.entries(groups)) {
+        if (known.has(key)) continue;
+        const months = new Set(txs.map((t) => monthKeyOf(t.expense_date)));
+        if (months.size < 3) continue;
+        const amounts = txs.map((t) => Number(t.amount));
+        const avg = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+        if (!amounts.every((a) => Math.abs(a - avg) <= avg * 0.1)) continue;
+        const latest = [...txs].sort((a, b) => b.expense_date.localeCompare(a.expense_date))[0];
+        found.push({ key, name: latest.description || key, amount: avg, category: latest.category, day: Number(latest.expense_date.slice(8, 10)), months: months.size });
+      }
+      return found.sort((a, b) => b.amount - a.amount).slice(0, 5);
+    }
+
+    function renderToday() {
+      const root = document.getElementById("today-root");
+      if (!root) return;
+      const today = todayIso();
+      const monthKey = monthKeyOf(today);
+      const day = Number(today.slice(8, 10));
+      const dim = daysInMonthOf(today);
+      const eur = (v) => currencyFormatter.format(v);
+      const real = (tx) => tx.category !== TRANSFER_CATEGORY && !tx.transfer_account_id;
+      const monthTx = allTransactions.filter((t) => monthKeyOf(t.expense_date) === monthKey && real(t));
+      const spentMonth = monthTx.filter((t) => (t.type || "expense") === "expense").reduce((a, t) => a + Number(t.amount), 0);
+      const incomeMonth = monthTx.filter((t) => t.type === "income").reduce((a, t) => a + Number(t.amount), 0);
+      const spentToday = monthTx.filter((t) => (t.type || "expense") === "expense" && t.expense_date === today).reduce((a, t) => a + Number(t.amount), 0);
+
+      let upExp = 0, upInc = 0;
+      const upcoming = [];
+      for (const item of allRecurring) {
+        if (!recurringActiveForMonth(item, monthKey)) continue;
+        const d = Math.min(Number(item.day_of_month), dim);
+        if (d <= day) continue;
+        if ((item.type || "expense") === "income") upInc += Number(item.amount); else upExp += Number(item.amount);
+        if (d - day <= 7) upcoming.push({ d, item });
+      }
+      // Mensualités de prêts à venir ce mois-ci (si non importées comme récurrentes)
+      let bank = 0, bankKnown = false, liquid = 0;
+      for (const acc of allAccounts) {
+        if (acc.active === false) continue;
+        const st = computeAccountState(acc);
+        if (!st.known) continue;
+        if (acc.kind === "bank") { bank += st.balance; bankKnown = true; }
+        if (acc.kind === "bank" || acc.kind === "savings") liquid += st.balance;
+      }
+      const remainingDays = dim - day;
+      const avgDaily = day > 0 ? spentMonth / day : 0;
+      const resteAVivre = bank + upInc - upExp;
+      const forecast = resteAVivre - avgDaily * remainingDays;
+
+      let html = "";
+      if (bankKnown) {
+        html += `<div class="dashboard-row"><p class="label" style="margin:0;color:var(--text-dim)">Reste à vivre jusqu'à la fin du mois</p>` +
+          `<p class="today-big ${resteAVivre >= 0 ? "positive" : "negative"}">${escapeHtml(eur(resteAVivre))}</p>` +
+          `<p class="recurring-hint" style="margin:0">≈ <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}</strong> par jour (solde courant ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))})</p>` +
+          `<div class="today-row"><span>Prévision au 31 (à ton rythme actuel de ${escapeHtml(eur(avgDaily))}/jour)</span><strong class="${forecast >= 0 ? "positive" : "negative"}">${escapeHtml(eur(forecast))}</strong></div></div>`;
+      } else {
+        html += `<div class="today-alert warn">Pour voir ton <strong>reste à vivre</strong>, ajoute ton compte courant dans l'onglet Patrimoine et tape son solde réel.</div>`;
+      }
+
+      html += `<div class="loans-totals">` +
+        `<div class="stat-card"><p class="label">Dépensé aujourd'hui</p><p class="value">${escapeHtml(eur(spentToday))}</p></div>` +
+        `<div class="stat-card"><p class="label">Dépensé ce mois</p><p class="value">${escapeHtml(eur(spentMonth))}</p></div>` +
+        `<div class="stat-card"><p class="label">Revenus ce mois</p><p class="value">${escapeHtml(eur(incomeMonth))}</p></div></div>`;
+
+      // Alertes
+      const alerts = [];
+      if (bankKnown && forecast < 0) alerts.push(["bad", `⚠️ À ce rythme, ton compte courant sera à découvert avant la fin du mois (${eur(forecast)}).`]);
+      for (const b of allBudgets) {
+        const spent = monthTx.filter((t) => (t.type || "expense") === "expense" && t.category === b.category).reduce((a, t) => a + Number(t.amount), 0);
+        const ratio = Number(b.amount) ? spent / Number(b.amount) : 0;
+        const label = (allCategoryLabels[b.category] || b.category);
+        if (ratio >= 1) alerts.push(["bad", `🚨 Budget « ${label} » dépassé : ${eur(spent)} sur ${eur(Number(b.amount))}.`]);
+        else if (ratio >= 0.8) alerts.push(["warn", `🟠 Budget « ${label} » à ${Math.round(ratio * 100)} % : ${eur(spent)} sur ${eur(Number(b.amount))}.`]);
+      }
+      for (const acc of allAccounts) {
+        if (acc.active === false || acc.ceiling == null || !Number(acc.ceiling)) continue;
+        const st = computeAccountState(acc);
+        if (!st.known) continue;
+        const ratio = st.balance / Number(acc.ceiling);
+        if (ratio >= 0.95) alerts.push(["warn", `🏦 ${acc.name} proche de son plafond (${eur(st.balance)} / ${eur(Number(acc.ceiling))}) : au-delà, place le surplus ailleurs.`]);
+      }
+      for (const p of activeProjects()) {
+        const st = projectState(p);
+        const left = Math.round(monthsBetweenIso(today, st.endDate) * 30);
+        if (st.matured) alerts.push(["warn", `⏰ Le projet « ${p.name} » a atteint son échéance : le capital est à récupérer.`]);
+        else if (left >= 0 && left <= 30) alerts.push(["good", `📅 Le projet « ${p.name} » se termine dans ${left} jour${left > 1 ? "s" : ""}.`]);
+      }
+      if (alerts.length === 0) alerts.push(["good", "✅ Rien à signaler : budgets, plafonds et projets sont dans les clous."]);
+      html += `<h3 style="margin:1rem 0 0.25rem;">Alertes</h3>` + alerts.map(([c, t]) => `<div class="today-alert ${c}">${escapeHtml(t)}</div>`).join("");
+
+      // À venir
+      if (upcoming.length) {
+        upcoming.sort((a, b) => a.d - b.d);
+        html += `<h3 style="margin:1rem 0 0.25rem;">À venir (7 jours)</h3><div class="dashboard-row">` +
+          upcoming.map(({ d, item }) => `<div class="today-row"><span>${escapeHtml(String(d).padStart(2, "0"))}/${escapeHtml(monthKey.slice(5))} · ${escapeHtml(item.name)}</span><strong class="${(item.type || "expense") === "income" ? "positive" : ""}">${(item.type || "expense") === "income" ? "+" : "−"}${escapeHtml(eur(Number(item.amount)))}</strong></div>`).join("") + `</div>`;
+      }
+
+      // Matelas de sécurité
+      const recurringExpMonthly = allRecurring.filter((r) => (r.type || "expense") === "expense" && recurringActiveForMonth(r, monthKey)).reduce((a, r) => a + Number(r.amount), 0);
+      const past = [];
+      for (let i = 1; i <= 3; i++) {
+        const dt = new Date(); dt.setDate(1); dt.setMonth(dt.getMonth() - i);
+        const key = dt.toISOString().slice(0, 7);
+        const tot = allTransactions.filter((t) => monthKeyOf(t.expense_date) === key && real(t) && (t.type || "expense") === "expense").reduce((a, t) => a + Number(t.amount), 0);
+        if (tot > 0) past.push(tot);
+      }
+      const monthlyNeed = past.length ? past.reduce((a, b) => a + b, 0) / past.length + recurringExpMonthly : recurringExpMonthly;
+      if (liquid > 0 && monthlyNeed > 0) {
+        const cover = liquid / monthlyNeed;
+        html += `<h3 style="margin:1rem 0 0.25rem;">Matelas de sécurité</h3><div class="dashboard-row"><p style="margin:0">Ton épargne disponible (courant + livrets) couvre environ <strong>${cover.toFixed(1).replace(".", ",")} mois</strong> de dépenses.</p>` +
+          `<div class="progress-bar ${cover < 3 ? "bad" : cover < 6 ? "warn" : ""}"><span style="width:${Math.min(100, cover / 6 * 100)}%"></span></div>` +
+          `<p class="recurring-hint" style="margin:0">${cover < 3 ? "En dessous de 3 mois : priorité à la constitution d'un matelas avant d'investir davantage." : cover < 6 ? "Bien — l'objectif classique est de 3 à 6 mois." : "Matelas confortable : tu peux orienter le surplus vers l'investissement."}</p></div>`;
+      }
+
+      // Abonnements détectés
+      const subs = detectSubscriptions();
+      if (subs.length) {
+        html += `<h3 style="margin:1rem 0 0.25rem;">Ça ressemble à un abonnement</h3><div class="dashboard-row"><p class="recurring-hint" style="margin-top:0">Dépenses qui reviennent chaque mois au même prix et qui ne sont pas encore dans tes récurrentes.</p>` +
+          subs.map((x, i) => `<div class="today-row"><span>${escapeHtml(x.name)} · ${escapeHtml(eur(x.amount))}/mois</span><button class="secondary" data-sub="${i}">Ajouter aux récurrentes</button></div>`).join("") + `</div>`;
+      }
+      root.innerHTML = html;
+      root.querySelectorAll("[data-sub]").forEach((btn) => btn.addEventListener("click", async () => {
+        const x = subs[Number(btn.dataset.sub)];
+        btn.disabled = true;
+        try {
+          await apiFetch("/api/recurring", { method: "POST", body: JSON.stringify({ type: "expense", name: x.name, amount: Math.round(x.amount * 100) / 100, category: x.category || "autre", day_of_month: x.day }) });
+          await loadRecurring();
+          showToast("Ajouté aux récurrentes");
+          renderToday();
+        } catch (err) { showToast("Erreur : " + err.message, true); btn.disabled = false; }
+      }));
+    }
+
+    // ---- Préférences, règles apprises, sauvegarde (onglet Aide)
+    async function loadPreferencesUi() {
+      try {
+        const prefs = await apiFetch("/api/preferences");
+        document.getElementById("pref-monthly-summary").checked = Boolean(prefs.monthly_summary);
+      } catch (err) { /* silencieux */ }
+      await renderRules();
+    }
+    document.getElementById("pref-monthly-summary").addEventListener("change", async (e) => {
+      try { await apiFetch("/api/preferences", { method: "PUT", body: JSON.stringify({ monthly_summary: e.target.checked }) }); showToast(e.target.checked ? "Bilan mensuel activé" : "Bilan mensuel désactivé"); }
+      catch (err) { showToast("Erreur : " + err.message, true); e.target.checked = !e.target.checked; }
+    });
+    async function renderRules() {
+      const el = document.getElementById("rules-list");
+      try {
+        const rules = await apiFetch("/api/category-rules");
+        el.innerHTML = rules.length ? "" : '<p class="recurring-hint">Rien d\'appris pour l\'instant.</p>';
+        for (const r of rules) {
+          const row = document.createElement("div");
+          row.className = "today-row";
+          row.innerHTML = `<span>« ${escapeHtml(r.rule_key)} » → ${escapeHtml(r.category)}</span><button class="icon-btn danger" aria-label="Oublier cette règle">🗑️</button>`;
+          row.querySelector("button").addEventListener("click", async () => { await apiFetch(`/api/category-rules/${r.id}`, { method: "DELETE" }); renderRules(); });
+          el.appendChild(row);
+        }
+      } catch (err) { el.textContent = ""; }
+    }
+    document.getElementById("backup-btn").addEventListener("click", async () => {
+      try {
+        const data = await apiFetch("/api/export/json");
+        const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `kaching-sauvegarde-${todayIso()}.json`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      } catch (err) { showToast("Erreur : " + err.message, true); }
+    });
+
       (async function init() {
         // Catégories perso + suggestions ignorées d'abord, pour que les
         // listes déroulantes et le bandeau soient corrects dès le premier
         // rendu plutôt que de "sauter" une fois le serveur répondu.
-        await Promise.all([loadCustomCategories(), loadDismissedSuggestions(), loadBudgets(), loadSavingsGoal(), loadCategoryRatings(), loadLoans(), loadAccounts()]);
+        await Promise.all([loadCustomCategories(), loadDismissedSuggestions(), loadBudgets(), loadSavingsGoal(), loadCategoryRatings(), loadLoans(), loadAccounts(), loadProjects()]);
         populateFilterCategoryOptions();
         await loadTransactions();
-        loadRecurring();
+        await loadRecurring();
+        loadPreferencesUi();
+        switchView("today");
 
         // Raccourcis PWA (appui long sur l'icône de l'app une fois installée) :
         // /?shortcut=add ouvre directement le formulaire d'ajout, /?shortcut=voice

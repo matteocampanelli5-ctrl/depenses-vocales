@@ -46,6 +46,7 @@ from app.models import GenericImportCommitRequest, WorkbookCommitRequest
 from app.routers.accounts import ensure_own_accounts
 from app.routers.loans import active_loans, match_loan_for_payment
 from app.routers.recurring import _clamp_day, _month_add
+from app.rules import learn_rule, load_rules, rule_key
 from app.security import require_user
 from app.voice_nlp import _fetch_custom_categories
 from app.workbook_parsing import analyze_workbook, property_key
@@ -500,6 +501,7 @@ async def preview_generic_import(
     income_cats = INCOME_CATEGORIES | set(custom.get("income", {}).keys())
     all_categories = expense_cats | income_cats
     loans = active_loans(client, user_id)
+    learned_rules = load_rules(client, user_id)
 
     ai_data = _call_claude_generic_import(ai_content, all_categories, target_names)
     raw_entries = ai_data.get("entries")
@@ -553,6 +555,13 @@ async def preview_generic_import(
         category_guess = str(raw.get("category_guess") or "autre").strip().lower()
         valid_cats = income_cats if tx_type == "income" else expense_cats
         category = category_guess if category_guess in valid_cats else "autre"
+        # Une correspondance apprise (l'utilisateur a déjà corrigé cette
+        # enseigne) l'emporte sur la proposition de l'IA.
+        rule_applied = False
+        learned = learned_rules.get((tx_type, rule_key(source_label)))
+        if learned and learned in valid_cats:
+            category = learned
+            rule_applied = True
         transfer_name = raw.get("transfer_account")
         transfer_account_id = (
             transfer_targets.get(_normalize_key(transfer_name)) if isinstance(transfer_name, str) else None
@@ -580,6 +589,7 @@ async def preview_generic_import(
             "source_label": source_label,
             "transfer_account_id": transfer_account_id,
             "loan_id": loan_id,
+            "rule_applied": rule_applied and not transfer_account_id and category != LOAN_CATEGORY,
         })
 
     if not parsed:
@@ -700,6 +710,8 @@ def commit_generic_import(req: GenericImportCommitRequest, user_id: str = Depend
                 "transfer_account_id": transfer_id,
                 "loan_id": loan_id,
             })
+            if row.learn_rule and not transfer_id and not loan_id and category not in (TRANSFER_CATEGORY, LOAN_CATEGORY):
+                learn_rule(client, user_id, row.type, row.source_label or row.description, category)
         result = client.table("transactions").insert(payload).execute()
         inserted_transactions = len(result.data)
 

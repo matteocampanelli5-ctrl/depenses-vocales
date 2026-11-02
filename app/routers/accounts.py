@@ -69,6 +69,7 @@ def create_account(item: AccountIn, user_id: str = Depends(require_user)) -> dic
         "name": _clean_name(item.name),
         "kind": item.kind,
         "annual_rate_pct": item.annual_rate_pct,
+        "ceiling": item.ceiling,
         "active": True,
     }
     return client.table("accounts").insert(payload).execute().data[0]
@@ -79,8 +80,8 @@ def update_account(account_id: UUID, item: AccountUpdate, user_id: str = Depends
     client = get_supabase_client()
     payload: dict = {}
     for key, value in item.model_dump(exclude_unset=True).items():
-        if key == "annual_rate_pct":
-            payload[key] = value  # null autorisé : retire le taux
+        if key in ("annual_rate_pct", "ceiling"):
+            payload[key] = value  # null autorisé : retire le taux / le plafond
         elif value is None:
             continue
         elif key == "name":

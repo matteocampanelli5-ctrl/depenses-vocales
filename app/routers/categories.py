@@ -178,3 +178,28 @@ def upsert_category_rating(item: CategoryRatingIn, user_id: str = Depends(requir
         {"user_id": user_id, "category": category, "rating": item.rating, "rating_updated_at": now}
     ).execute()
     return result.data[0]
+
+
+# ---------------------------------------------------------------------------
+# Règles apprises à l'import (libellé de relevé -> catégorie), voir app/rules.py
+# ---------------------------------------------------------------------------
+@router.get("/api/category-rules")
+def list_category_rules(user_id: str = Depends(require_user)) -> list[dict]:
+    client = get_supabase_client()
+    return (
+        client.table("category_rules")
+        .select("id, tx_type, rule_key, category")
+        .eq("user_id", user_id)
+        .order("rule_key")
+        .execute()
+        .data
+    )
+
+
+@router.delete("/api/category-rules/{rule_id}", status_code=204)
+def delete_category_rule(rule_id: str, user_id: str = Depends(require_user)) -> Response:
+    client = get_supabase_client()
+    result = client.table("category_rules").delete().eq("id", rule_id).eq("user_id", user_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Règle introuvable")
+    return Response(status_code=204)

@@ -20,9 +20,11 @@ from app.routers import (
     auth,
     budgets,
     categories,
+    cron,
     export,
     imports,
     loans,
+    projects,
     recurring,
     savings,
     transactions,
@@ -101,3 +103,5 @@ app.include_router(loans.router)
 app.include_router(accounts.router)
 app.include_router(export.router)
 app.include_router(imports.router)
+app.include_router(projects.router)
+app.include_router(cron.router)
