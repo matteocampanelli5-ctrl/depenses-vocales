@@ -237,22 +237,9 @@ _GENERIC_IMPORT_SYSTEM_PROMPT_TEMPLATE = """Tu reçois le contenu brut d'un fich
 
 Ta tâche : repérer TOUTES les opérations (dépenses et revenus) présentes dans ce texte et les restituer sous forme d'une liste structurée.
 
-Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour, selon ce schéma :
-{
-  "entries": [
-    {
-      "description": "libellé court et lisible de la dépense/du revenu (nettoyé, sans le montant)",
-      "source_label": "le texte brut EXACT tel qu'il apparaît dans le fichier pour cette ligne (important : ne le modifie pas, il sert à détecter des motifs comme un numéro d'échéance)",
-      "amount": nombre positif,
-      "type": "expense" ou "income",
-      "category_guess": une chaîne parmi __ALL_CATEGORIES__ — ta meilleure estimation à partir du libellé, "autre" si aucune ne correspond clairement,
-      "month": "YYYY-MM" — le mois auquel se rattache cette opération, déduit du contexte (titre de section, en-tête de tableau, etc.),
-      "day": nombre entier (jour du mois) UNIQUEMENT si une date précise est réellement indiquée pour CETTE opération dans le fichier, sinon null — n'invente JAMAIS un jour si le fichier ne donne qu'un mois,
-      "transfer_account": si l'opération est un virement entre deux comptes de l'utilisateur lui-même (vers ou depuis un des comptes listés plus bas), le nom EXACT de cet autre compte tel qu'écrit dans la liste ; sinon null
-    }
-  ],
-  "warnings": ["tout ce qui t'a semblé ambigu ou incertain lors de la lecture, en français" (liste vide si rien à signaler)]
-}
+Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour, SUR UNE SEULE LIGNE (aucune indentation ni retour à la ligne), selon ce schéma. Les clés sont volontairement courtes : respecte-les exactement.
+{"e":[{"d":"libellé court et lisible (nettoyé, sans le montant)","s":"texte brut EXACT de la ligne tel qu'il apparaît dans le fichier (sert à détecter des motifs comme un numéro d'échéance ; ne le modifie pas)","a":nombre positif,"t":"expense" ou "income","c":une chaîne parmi __ALL_CATEGORIES__ — ta meilleure estimation, "autre" si aucune ne correspond clairement,"m":"YYYY-MM" (mois de l'opération, déduit du contexte),"y":jour du mois en nombre entier UNIQUEMENT si une date précise est indiquée pour CETTE opération, sinon null (n'invente JAMAIS un jour),"x":nom EXACT d'un autre compte de l'utilisateur si l'opération est un virement entre ses propres comptes (liste plus bas), sinon null}],"w":["avertissement court"]}
+"w" : 3 avertissements au maximum, une courte phrase chacun, uniquement pour un vrai problème de lecture (liste vide sinon). Ne commente pas les virements ni les soldes.
 
 RÈGLES IMPORTANTES :
 - N'invente aucune opération : seulement celles réellement présentes dans le texte.
@@ -291,7 +278,7 @@ def _call_claude_generic_import(
     try:
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=8000,
+            max_tokens=16000,
             system=_build_generic_import_prompt(all_categories, account_names),
             messages=[{"role": "user", "content": content}],
         )
@@ -307,22 +294,67 @@ def _call_claude_generic_import(
             detail="Le service d'import par IA est temporairement indisponible, réessaie plus tard.",
         ) from exc
 
-    if getattr(message, "stop_reason", None) == "max_tokens":
-        raise HTTPException(
-            status_code=422,
-            detail="Relevé trop long pour être lu en une fois : importe-le en plusieurs morceaux (un ou deux mois à la fois).",
-        )
     raw = "".join(block.text for block in message.content if hasattr(block, "text")).strip()
     raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    truncated = getattr(message, "stop_reason", None) == "max_tokens"
+    data = None
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=502, detail=f"Réponse IA invalide (JSON attendu) : {raw[:200]}"
-        ) from exc
+        if truncated:
+            data = _salvage_truncated_entries(raw)
+        if data is None:
+            if truncated:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Relevé trop long pour être lu en une fois : importe-le en plusieurs morceaux (un ou deux mois à la fois).",
+                ) from exc
+            raise HTTPException(
+                status_code=502, detail=f"Réponse IA invalide (JSON attendu) : {raw[:200]}"
+            ) from exc
     if not isinstance(data, dict):
         raise HTTPException(status_code=502, detail="Réponse IA invalide (objet JSON attendu)")
-    return data
+    return _expand_compact_keys(data, truncated)
+
+
+_COMPACT_KEYS = {"d": "description", "s": "source_label", "a": "amount", "t": "type", "c": "category_guess", "m": "month", "y": "day", "x": "transfer_account"}
+
+
+def _expand_compact_keys(data: dict, truncated: bool) -> dict:
+    """Remet les clés longues attendues par le reste du code (le prompt demande
+    des clés courtes pour réduire la taille de la réponse de l'IA)."""
+    entries = data.get("entries", data.get("e"))
+    out_entries = []
+    for item in entries if isinstance(entries, list) else []:
+        if isinstance(item, dict):
+            out_entries.append({_COMPACT_KEYS.get(k, k): v for k, v in item.items()})
+    warnings = data.get("warnings", data.get("w")) or []
+    warnings = [w for w in warnings if isinstance(w, str)]
+    if truncated:
+        warnings.insert(0, "Relevé très long : la fin n'a pas pu être lue. Vérifie la dernière date importée et réimporte la suite séparément.")
+    return {"entries": out_entries, "warnings": warnings}
+
+
+def _salvage_truncated_entries(raw: str) -> dict | None:
+    """Réponse coupée en plein milieu : récupère les opérations complètes déjà
+    écrites (objets JSON entiers dans la liste), ignore le dernier objet coupé."""
+    start = raw.find("[")
+    if start < 0:
+        return None
+    decoder = json.JSONDecoder()
+    pos = start + 1
+    entries = []
+    while True:
+        while pos < len(raw) and raw[pos] in " ,\n\r\t":
+            pos += 1
+        if pos >= len(raw) or raw[pos] != "{":
+            break
+        try:
+            obj, pos = decoder.raw_decode(raw, pos)
+        except json.JSONDecodeError:
+            break
+        entries.append(obj)
+    return {"e": entries} if entries else None
 
 
 def _detect_recurring_patterns(parsed: list[dict]) -> tuple[list[dict], dict[int, str]]:
