@@ -2025,9 +2025,9 @@
         <input type="date" id="project-input-start"></div>
       <div><label for="project-input-duration">Durée (mois)</label>
         <input type="number" id="project-input-duration" step="1" min="1" inputmode="numeric"></div>
-      <div><label for="project-input-received">Intérêts déjà reçus (€, optionnel)</label>
+      <div><label for="project-input-received">Intérêts reçus (€, total versé jusqu'ici)</label>
         <input type="number" id="project-input-received" step="0.01" min="0" inputmode="decimal"></div>
-      <div class="checkbox-row"><label><input type="checkbox" id="project-input-finished"> Projet terminé (capital récupéré)</label></div>
+      <div class="checkbox-row"><label><input type="checkbox" id="project-input-finished"> Projet terminé : capital remboursé (+ intérêts ci-dessus)</label></div>
       <div class="modal-actions">
         <button class="secondary" id="project-btn-cancel">Annuler</button>
         <button class="primary" id="project-btn-save">Ajouter</button>
@@ -8309,11 +8309,23 @@
         card.innerHTML =
           `<div class="account-card-head"><div><div class="account-card-name">${escapeHtml(p.name)}${st.finished ? " (terminé)" : ""}</div>` +
           `<div class="account-card-kind">${escapeHtml(currencyFormatter.format(Number(p.invested_amount)))} · ${escapeHtml(formatRate(p.annual_rate_pct))} %/an · ${escapeHtml(String(p.duration_months))} mois${acc ? " · " + escapeHtml(acc) : ""}</div></div>` +
-          `<div class="tx-actions"><button class="icon-btn" data-act="edit" aria-label="Modifier le projet">✏️</button><button class="icon-btn danger" data-act="del" aria-label="Supprimer le projet">🗑️</button></div></div>` +
+          `<div class="tx-actions">${st.finished ? "" : '<button class="icon-btn" data-act="repay" aria-label="Marquer comme remboursé" title="Remboursé (capital + intérêts)">✅</button>'}<button class="icon-btn" data-act="edit" aria-label="Modifier le projet">✏️</button><button class="icon-btn danger" data-act="del" aria-label="Supprimer le projet">🗑️</button></div></div>` +
           (st.finished ? "" : `<div class="progress-bar"><span style="width:${pct}%"></span></div>`) +
           `<div class="account-card-status">${st.finished ? "Terminé" : st.matured ? "⏰ Échéance atteinte le " + escapeHtml(st.endDate) + " — pense à passer le projet en « terminé » et à remettre le capital sur ton solde" : pct + " % écoulé · fin le " + escapeHtml(st.endDate)}` +
           ` · intérêts courus ≈ ${escapeHtml(currencyFormatter.format(st.accrued))} / ${escapeHtml(currencyFormatter.format(st.expected))}` +
           (Number(p.received_amount) ? ` · déjà reçus ${escapeHtml(currencyFormatter.format(Number(p.received_amount)))}` : "") + `</div>`;
+        const repayBtn = card.querySelector('[data-act="repay"]');
+        if (repayBtn) repayBtn.addEventListener("click", async () => {
+          const v = await askText(`« ${p.name} » remboursé : capital ${currencyFormatter.format(Number(p.invested_amount))} récupéré. Total des intérêts reçus (€) ?`, String(Math.round(st.expected * 100) / 100));
+          if (v === null || v === undefined) return;
+          const raw = String(v).replace(",", ".").trim();
+          const interest = raw === "" ? st.expected : parseFloat(raw);
+          if (!Number.isFinite(interest) || interest < 0) { showToast("Montant invalide", true); return; }
+          try {
+            await apiFetch(`/api/investment-projects/${p.id}`, { method: "PUT", body: JSON.stringify({ status: "finished", received_amount: Math.round(interest * 100) / 100 }) });
+            await loadProjects(); renderWealth(); showToast("Projet remboursé : capital + intérêts remis sur le compte");
+          } catch (err) { showToast("Erreur : " + err.message, true); }
+        });
         card.querySelector('[data-act="edit"]').addEventListener("click", () => openProjectModal(p));
         card.querySelector('[data-act="del"]').addEventListener("click", async () => {
           if (!(await showConfirm(`Supprimer le projet « ${p.name} » ?`))) return;
