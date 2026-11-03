@@ -528,6 +528,8 @@
     padding: 0.6rem 0;
     border-bottom: 1px solid var(--border);
   }
+  .month-delete { margin: 0.5rem 0 0.75rem; background: var(--surface); border-radius: 10px; padding: 0.5rem 0.75rem; }
+  .month-delete summary { cursor: pointer; font-size: 0.92rem; }
   .import-row.excluded { opacity: 0.45; }
   .import-row.needs-review { border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.10); padding-left: 0.5rem; border-radius: 6px; }
   .import-row-issue { color: #f59e0b; font-size: 0.85rem; margin-top: 0.15rem; font-weight: 600; }
@@ -1365,6 +1367,15 @@
         <input type="date" id="filter-date-start" aria-label="Du">
         <input type="date" id="filter-date-end" aria-label="Au">
       </div>
+      <details class="month-delete" id="month-delete">
+        <summary>🗑️ Supprimer un mois entier</summary>
+        <p class="recurring-hint">Pour rattraper une erreur d'import : efface toutes les opérations d'un mois, pour tous les comptes ou pour un seul. Les charges récurrentes ne sont pas touchées.</p>
+        <div class="filter-bar">
+          <select id="month-delete-account" aria-label="Compte"><option value="">Tous les comptes</option></select>
+          <select id="month-delete-month" aria-label="Mois"></select>
+          <button class="secondary" id="month-delete-btn">Supprimer</button>
+        </div>
+      </details>
       <div id="tx-list" class="tx-list"></div>
       <div id="empty-state" class="empty-state" style="display:none;">
         Rien pour l'instant — appuie sur le bouton + pour ajouter une dépense ou un revenu.
@@ -8396,6 +8407,52 @@
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(a.href), 2000);
       } catch (err) { showToast("Erreur : " + err.message, true); }
+    });
+
+
+    // ---- Suppression d'un mois entier (Historique)
+    async function refreshMonthDeleteOptions() {
+      const accSel = document.getElementById("month-delete-account");
+      const monSel = document.getElementById("month-delete-month");
+      if (!accSel.dataset.filled) {
+        for (const acc of sortedAccounts()) {
+          const o = document.createElement("option"); o.value = acc.id; o.textContent = acc.name; accSel.appendChild(o);
+        }
+        accSel.dataset.filled = "1";
+      }
+      try {
+        const q = accSel.value ? `?account_id=${encodeURIComponent(accSel.value)}` : "";
+        const months = await apiFetch("/api/transaction-months" + q);
+        monSel.innerHTML = "";
+        for (const m of months) {
+          const o = document.createElement("option");
+          o.value = m.month;
+          o.textContent = `${monthLabel(m.month)} (${m.count} opération${m.count > 1 ? "s" : ""})`;
+          monSel.appendChild(o);
+        }
+        if (!months.length) { const o = document.createElement("option"); o.textContent = "Aucune opération"; o.value = ""; monSel.appendChild(o); }
+      } catch (err) { /* silencieux */ }
+    }
+    document.getElementById("month-delete").addEventListener("toggle", (e) => { if (e.target.open) refreshMonthDeleteOptions(); });
+    document.getElementById("month-delete-account").addEventListener("change", refreshMonthDeleteOptions);
+    document.getElementById("month-delete-btn").addEventListener("click", async () => {
+      const month = document.getElementById("month-delete-month").value;
+      const accSel = document.getElementById("month-delete-account");
+      if (!month) { showToast("Aucun mois à supprimer", true); return; }
+      const scope = accSel.value ? `du compte « ${accSel.options[accSel.selectedIndex].textContent} »` : "de tous les comptes";
+      const ok = await showConfirm(`Supprimer DÉFINITIVEMENT toutes les opérations ${scope} pour ${monthLabel(month)} ? Cette action est irréversible.`);
+      if (!ok) return;
+      const btn = document.getElementById("month-delete-btn");
+      btn.disabled = true;
+      try {
+        const q = accSel.value ? `?account_id=${encodeURIComponent(accSel.value)}` : "";
+        const res = await apiFetch(`/api/transaction-months/${encodeURIComponent(month)}${q}`, { method: "DELETE" });
+        showToast(`${res.deleted} opération${res.deleted > 1 ? "s" : ""} supprimée${res.deleted > 1 ? "s" : ""}` + (res.kept_recurring ? ` (${res.kept_recurring} récurrente${res.kept_recurring > 1 ? "s" : ""} gardée${res.kept_recurring > 1 ? "s" : ""})` : ""));
+        await loadTransactions();
+        await Promise.all([loadAccounts(), loadLoans()]);
+        refreshMonthDeleteOptions();
+      } catch (err) { showToast("Erreur : " + err.message, true); }
+      finally { btn.disabled = false; }
     });
 
       (async function init() {

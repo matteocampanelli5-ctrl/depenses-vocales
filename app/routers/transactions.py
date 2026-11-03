@@ -147,3 +147,63 @@ def delete_transaction(transaction_id: str, user_id: str = Depends(require_user)
     if not result.data:
         raise HTTPException(status_code=404, detail="Transaction introuvable")
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Suppression d'un mois entier (rattrapage d'une erreur d'import)
+# ---------------------------------------------------------------------------
+def _month_bounds(month: str) -> tuple[str, str]:
+    try:
+        year, mon = (int(part) for part in month.split("-"))
+        first = date(year, mon, 1)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="Mois invalide (attendu : AAAA-MM)") from exc
+    nxt = date(year + (mon == 12), 1 if mon == 12 else mon + 1, 1)
+    return first.isoformat(), nxt.isoformat()
+
+
+def _month_query(client, user_id: str, month: str, account_id: str | None):
+    start, end = _month_bounds(month)
+    query = (
+        client.table("transactions")
+        .select("id, recurring_expense_id")
+        .eq("user_id", user_id)
+        .gte("expense_date", start)
+        .lt("expense_date", end)
+    )
+    if account_id:
+        ensure_own_accounts(client, user_id, account_id)
+        query = query.eq("account_id", account_id)
+    return query.execute().data
+
+
+@router.get("/api/transaction-months")
+def list_transaction_months(account_id: str | None = None, user_id: str = Depends(require_user)) -> list[dict]:
+    """Mois qui contiennent des opérations (avec leur nombre), pour le choix
+    du mois à supprimer. `account_id` restreint à un compte."""
+    client = get_supabase_client()
+    query = client.table("transactions").select("expense_date, recurring_expense_id").eq("user_id", user_id)
+    if account_id:
+        ensure_own_accounts(client, user_id, account_id)
+        query = query.eq("account_id", account_id)
+    counts: dict[str, int] = {}
+    for row in query.execute().data:
+        key = str(row["expense_date"])[:7]
+        counts[key] = counts.get(key, 0) + 1
+    return [{"month": m, "count": c} for m, c in sorted(counts.items(), reverse=True)]
+
+
+@router.delete("/api/transaction-months/{month}")
+def delete_transaction_month(month: str, account_id: str | None = None, user_id: str = Depends(require_user)) -> dict:
+    """Supprime les opérations d'un mois (et d'un compte si `account_id`).
+    Les occurrences de charges récurrentes sont gardées : elles seraient
+    recréées automatiquement au prochain chargement ; pour les faire
+    disparaître, il faut modifier ou supprimer la charge récurrente."""
+    client = get_supabase_client()
+    rows = _month_query(client, user_id, month, account_id)
+    to_delete = [row["id"] for row in rows if not row.get("recurring_expense_id")]
+    kept = len(rows) - len(to_delete)
+    for start in range(0, len(to_delete), 200):
+        chunk = to_delete[start:start + 200]
+        client.table("transactions").delete().eq("user_id", user_id).in_("id", chunk).execute()
+    return {"deleted": len(to_delete), "kept_recurring": kept}
