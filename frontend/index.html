@@ -1805,6 +1805,14 @@
         <p class="recurring-hint">Quand tu corriges une catégorie pendant un import, l'appli s'en souvient pour les prochains relevés.</p>
         <div id="rules-list"></div>
       </div>
+      <h3 style="margin:1rem 0 0.25rem;">🏷️ Mes catégories</h3>
+      <p class="recurring-hint">Crée tes propres catégories ici (ou directement pendant un import, via « ➕ Nouvelle catégorie… »). Une catégorie encore utilisée par des opérations ne peut pas être supprimée.</p>
+      <div class="filter-bar">
+        <select id="newcat-type" aria-label="Type"><option value="expense">Dépense</option><option value="income">Revenu</option></select>
+        <input type="text" id="newcat-name" maxlength="40" placeholder="Nom de la catégorie">
+        <button class="secondary" id="newcat-add-btn">Ajouter</button>
+      </div>
+      <div id="newcat-list"></div>
       <h3 style="margin:1rem 0 0.25rem;">💾 Sauvegarde</h3>
       <p class="recurring-hint">Télécharge une copie complète de tes données (à garder au chaud).</p>
       <button class="secondary" id="backup-btn">Télécharger ma sauvegarde</button>
@@ -2041,6 +2049,17 @@
       <div class="modal-actions">
         <button class="secondary" id="balance-btn-cancel">Annuler</button>
         <button class="primary" id="balance-btn-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="text-modal-overlay">
+    <div class="modal">
+      <h2 id="text-modal-title">Nom</h2>
+      <input type="text" id="text-modal-input" maxlength="40">
+      <div class="modal-actions">
+        <button class="secondary" id="text-btn-cancel">Annuler</button>
+        <button class="primary" id="text-btn-ok">Créer</button>
       </div>
     </div>
   </div>
@@ -3110,9 +3129,11 @@
       }
     }
 
+    let customCategoryItems = [];
     async function loadCustomCategories() {
       try {
         const items = await apiFetch("/api/custom-categories");
+        customCategoryItems = items;
         for (const { type, value, label } of items) {
           if (categoriesByType[type] && !categoriesByType[type].some(([v]) => v === value)) {
             categoriesByType[type].push([value, label]);
@@ -3720,7 +3741,7 @@
       if (view === "savings") renderSavings(allTransactions);
       if (view === "loans") renderLoans();
       if (view === "wealth") renderWealth();
-      if (view === "help") renderHelp();
+      if (view === "help") { renderHelp(); renderCustomCategoriesList(); }
       closeNavDrawer();
     }
 
@@ -7343,6 +7364,71 @@
       return n;
     }
 
+
+    // ---- Création de catégories hors formulaire d'ajout
+    let textModalResolve = null;
+    function askText(title, placeholder = "") {
+      document.getElementById("text-modal-title").textContent = title;
+      const input = document.getElementById("text-modal-input");
+      input.value = "";
+      input.placeholder = placeholder;
+      document.getElementById("text-modal-overlay").classList.remove("hidden");
+      input.focus();
+      return new Promise((resolve) => { textModalResolve = resolve; });
+    }
+    function closeTextModal(value) {
+      document.getElementById("text-modal-overlay").classList.add("hidden");
+      if (textModalResolve) { textModalResolve(value); textModalResolve = null; }
+    }
+    document.getElementById("text-btn-ok").addEventListener("click", () => closeTextModal(document.getElementById("text-modal-input").value.trim() || null));
+    document.getElementById("text-btn-cancel").addEventListener("click", () => closeTextModal(null));
+    document.getElementById("text-modal-input").addEventListener("keydown", (e) => { if (e.key === "Enter") document.getElementById("text-btn-ok").click(); });
+    document.getElementById("text-modal-overlay").addEventListener("click", (e) => { if (e.target.id === "text-modal-overlay") closeTextModal(null); });
+
+    // Crée (si besoin) une catégorie perso et renvoie sa valeur.
+    async function createCategoryNamed(type, name) {
+      const value = slugifyCategory(name);
+      if (!categoriesByType[type].some(([v]) => v === value)) {
+        await saveCustomCategory(type, value, name);
+        await loadCustomCategories();
+      }
+      return value;
+    }
+
+    function renderCustomCategoriesList() {
+      const el = document.getElementById("newcat-list");
+      if (!el) return;
+      el.innerHTML = "";
+      if (!customCategoryItems.length) { el.innerHTML = '<p class="recurring-hint">Aucune catégorie perso pour l\'instant.</p>'; return; }
+      for (const c of customCategoryItems) {
+        const row = document.createElement("div");
+        row.className = "today-row";
+        row.innerHTML = `<span>${escapeHtml(c.label)} <span style="color:var(--text-dim)">· ${c.type === "income" ? "revenu" : "dépense"}</span></span><button class="icon-btn danger" aria-label="Supprimer la catégorie">🗑️</button>`;
+        row.querySelector("button").addEventListener("click", async () => {
+          try {
+            await apiFetch(`/api/custom-categories/${c.type}/${encodeURIComponent(c.value)}`, { method: "DELETE" });
+            categoriesByType[c.type] = categoriesByType[c.type].filter(([v]) => v !== c.value);
+            customCategoryItems = customCategoryItems.filter((x) => x !== c);
+            populateFilterCategoryOptions();
+            renderCustomCategoriesList();
+            showToast("Catégorie supprimée");
+          } catch (err) { showToast(err.message, true); }
+        });
+        el.appendChild(row);
+      }
+    }
+    document.getElementById("newcat-add-btn").addEventListener("click", async () => {
+      const name = document.getElementById("newcat-name").value.trim();
+      const type = document.getElementById("newcat-type").value;
+      if (!name) { showToast("Donne un nom à la catégorie", true); return; }
+      try {
+        await createCategoryNamed(type, name);
+        document.getElementById("newcat-name").value = "";
+        renderCustomCategoriesList();
+        showToast("Catégorie créée");
+      } catch (err) { showToast("Erreur : " + err.message, true); }
+    });
+
     function renderGenericImportPreview() {
       genericRowsListEl.innerHTML = "";
       const issueCount = genericImportRows.filter((r) => transferIssue(r)).length;
@@ -7439,6 +7525,10 @@
           if (!row.transfer_account_id && value === row.category) opt.selected = true;
           catSelect.appendChild(opt);
         }
+        const newCatOpt = document.createElement("option");
+        newCatOpt.value = "__new__";
+        newCatOpt.textContent = "➕ Nouvelle catégorie…";
+        catSelect.appendChild(newCatOpt);
         for (const acc of sortedAccounts()) {
           if (acc.active === false || acc.id === genericImportAccountId) continue;
           const opt = document.createElement("option");
@@ -7447,7 +7537,24 @@
           if (row.transfer_account_id === acc.id) opt.selected = true;
           catSelect.appendChild(opt);
         }
-        catSelect.addEventListener("change", () => {
+        catSelect.addEventListener("change", async () => {
+          if (catSelect.value === "__new__") {
+            const name = await askText("Nouvelle catégorie", "Ex : Sport, Cadeaux…");
+            if (!name) { renderGenericImportPreview(); return; }
+            try {
+              const value = await createCategoryNamed(row.type, name);
+              genericImportCategoryLabels[row.type][value] = (allCategoryLabels[value] || name);
+              catSelect.value = value;
+              row.category = value;
+              row.transfer_account_id = null;
+              if (value !== LOAN_CATEGORY) row.loan_id = null;
+              row.categoryTouched = true;
+              const similar = propagateCategory(row);
+              if (similar) showToast(`${similar} ligne${similar > 1 ? "s" : ""} similaire${similar > 1 ? "s" : ""} mise${similar > 1 ? "s" : ""} à jour`);
+            } catch (err) { showToast("Erreur : " + err.message, true); }
+            renderGenericImportPreview();
+            return;
+          }
           row.categoryTouched = true;
           if (catSelect.value.startsWith("transfer:")) {
             row.transfer_account_id = catSelect.value.slice("transfer:".length);
@@ -8407,6 +8514,7 @@
         document.getElementById("pref-monthly-summary").checked = Boolean(prefs.monthly_summary);
       } catch (err) { /* silencieux */ }
       await renderRules();
+      renderCustomCategoriesList();
     }
     document.getElementById("pref-monthly-summary").addEventListener("change", async (e) => {
       try { await apiFetch("/api/preferences", { method: "PUT", body: JSON.stringify({ monthly_summary: e.target.checked }) }); showToast(e.target.checked ? "Bilan mensuel activé" : "Bilan mensuel désactivé"); }
