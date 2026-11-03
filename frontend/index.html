@@ -6407,6 +6407,7 @@
     // (un relevé importé ne couvre jamais tout son historique).
     let allAccounts = [];
     let allBalances = [];
+    let allProjects = []; // projets de placement (chargés plus bas)
     let allNetWorth = [];
     let editingAccountId = null;
     let balanceAccountId = null;
@@ -6562,7 +6563,20 @@
       const since = last ? moves.filter((m) => m.date > last.balance_date) : moves;
       const delta = since.reduce((sum, m) => sum + m.amount, 0);
       const known = Boolean(last) || ((acc.kind === "savings" || acc.kind === "investment") && moves.length > 0);
-      const balance = (last ? Number(last.balance) : 0) + delta;
+      let balance = (last ? Number(last.balance) : 0) + delta;
+      // Projets de placement lancés depuis le dernier solde réel : l'argent
+      // investi sort de l'argent disponible du compte (et les intérêts reçus
+      // y rentrent). Un projet antérieur au solde réel y est déjà inclus.
+      let projectAdjust = 0;
+      try {
+        for (const p of allProjects) {
+          if (p.account_id !== acc.id || p.start_date > today) continue;
+          if (last && p.start_date <= last.balance_date) continue;
+          const inv = Number(p.invested_amount);
+          projectAdjust += -inv + (p.status === "finished" ? inv : 0) + Number(p.received_amount || 0);
+        }
+        balance += projectAdjust;
+      } catch (e) { projectAdjust = 0; /* projets pas encore chargés */ }
 
       // Courbe : on rejoue les mouvements dans l'ordre ; un solde réel
       // remplace la valeur calculée à sa date (il inclut les mouvements du
@@ -6596,7 +6610,7 @@
         .filter((m) => m.transfer && m.date >= sixIso)
         .reduce((sum, m) => sum + m.amount, 0);
 
-      return { balance, known, last, since, snapshots, moves, history, monthlyContribution: recentTransfersIn / 6 };
+      return { balance, known, last, since, snapshots, moves, history, projectAdjust, monthlyContribution: recentTransfersIn / 6 };
     }
 
     // Projection simple : intérêts composés mensuels au taux du compte, avec
@@ -6744,7 +6758,8 @@
       if (engaged > 0) {
         const pe = document.createElement("div");
         pe.className = "account-card-status";
-        pe.textContent = `+ ${currencyFormatter.format(engaged)} engagés dans des projets → valeur totale ${currencyFormatter.format((state.known ? state.balance : 0) + engaged)}`;
+        pe.textContent = `Disponible ci-dessus · + ${currencyFormatter.format(engaged)} engagés dans des projets → valeur totale ${currencyFormatter.format((state.known ? state.balance : 0) + engaged)}` +
+          (state.projectAdjust ? ` (dont ${currencyFormatter.format(state.projectAdjust)} déjà déduits du disponible depuis le dernier solde réel)` : "");
         card.appendChild(pe);
       }
       if (acc.ceiling != null && Number(acc.ceiling) > 0 && state.known) {
@@ -8220,8 +8235,6 @@
     // ======================================================================
     // Usage quotidien : projets de placement, écran « Aujourd'hui », règles
     // ======================================================================
-    let allProjects = [];
-
     async function loadProjects() {
       try { allProjects = await apiFetch("/api/investment-projects"); }
       catch (err) { allProjects = []; }
