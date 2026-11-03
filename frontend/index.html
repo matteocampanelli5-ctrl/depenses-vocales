@@ -7316,6 +7316,33 @@
       return null;
     }
 
+
+    // Même logique que app/rules.py (clé d'un libellé de relevé) : sert à
+    // appliquer tout de suite un changement de catégorie aux lignes
+    // similaires du même import.
+    const RULE_NOISE = new Set(["cb","carte","paiement","prlv","prelevement","vir","virement","sepa","achat","retrait","dab","facture","fact","pos","contactless","sans","contact","de","du","la","le","des"]);
+    function jsRuleKey(label) {
+      let t = String(label || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      t = t.replace(/\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b/g, " ").replace(/[^a-z\s]/g, " ");
+      const words = t.split(/\s+/).filter((w) => w.length > 1 && !RULE_NOISE.has(w) && !/^x+$/.test(w));
+      return words.slice(0, 3).join(" ").slice(0, 60);
+    }
+    function propagateCategory(changed) {
+      const key = jsRuleKey(changed.source_label);
+      if (!key) return 0;
+      let n = 0;
+      for (const r of genericImportRows) {
+        if (r === changed || r.type !== changed.type || r.transfer_account_id || r.loan_id || r.categoryTouched) continue;
+        const rk = jsRuleKey(r.source_label);
+        if (rk && (rk === key || rk.startsWith(key + " ")) && r.category !== changed.category) {
+          r.category = changed.category;
+          r.rule_applied = true;
+          n += 1;
+        }
+      }
+      return n;
+    }
+
     function renderGenericImportPreview() {
       genericRowsListEl.innerHTML = "";
       const issueCount = genericImportRows.filter((r) => transferIssue(r)).length;
@@ -7430,6 +7457,8 @@
             row.transfer_account_id = null;
             row.category = catSelect.value;
             if (row.category !== LOAN_CATEGORY) row.loan_id = null;
+            const similar = propagateCategory(row);
+            if (similar) showToast(`${similar} ligne${similar > 1 ? "s" : ""} similaire${similar > 1 ? "s" : ""} mise${similar > 1 ? "s" : ""} à jour`);
           }
           renderGenericImportPreview();
         });

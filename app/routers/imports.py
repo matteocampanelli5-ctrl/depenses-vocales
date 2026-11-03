@@ -47,7 +47,7 @@ from app.models import GenericImportCommitRequest, WorkbookCommitRequest
 from app.routers.accounts import ensure_own_accounts
 from app.routers.loans import active_loans, match_loan_for_payment
 from app.routers.recurring import _clamp_day, _month_add
-from app.rules import learn_rule, load_rules, rule_key
+from app.rules import learn_rule, load_rules, match_rule, rule_key
 from app.security import require_user
 from app.voice_nlp import _fetch_custom_categories
 from app.workbook_parsing import analyze_workbook, property_key
@@ -303,6 +303,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour, SUR UNE 
 
 RÈGLES IMPORTANTES :
 - N'invente aucune opération : seulement celles réellement présentes dans le texte.
+- CATÉGORIES : n'invente pas. Si tu ne reconnais pas clairement l'enseigne ou la nature de la dépense (sigle, nom propre inconnu, libellé bancaire opaque), mets "autre" — c'est préférable à une catégorie précise devinée. L'utilisateur corrige ensuite et l'appli retient ses choix. Ne choisis une catégorie que si le libellé est sans ambiguïté (ex : supermarché connu, SNCF, Netflix, restaurant explicite).
 - Si l'année n'est pas explicitement indiquée, utilise __DEFAULT_YEAR__ par défaut et signale-le dans "warnings".
 - Ignore les lignes de total, sous-total, solde, ou en-tête de colonnes.
 - "source_label" doit rester le texte brut non modifié (utile pour une détection de motifs faite ensuite par un autre programme) ; "description" peut en revanche être nettoyé/raccourci.
@@ -666,7 +667,7 @@ async def preview_generic_import(
         # Une correspondance apprise (l'utilisateur a déjà corrigé cette
         # enseigne) l'emporte sur la proposition de l'IA.
         rule_applied = False
-        learned = learned_rules.get((tx_type, rule_key(source_label)))
+        learned = match_rule(learned_rules, tx_type, rule_key(source_label))
         if learned and learned in valid_cats:
             category = learned
             rule_applied = True

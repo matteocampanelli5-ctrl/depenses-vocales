@@ -25,7 +25,7 @@ def rule_key(label: str | None) -> str:
     text = "".join(c for c in unicodedata.normalize("NFD", str(label)) if unicodedata.category(c) != "Mn").lower()
     text = re.sub(r"\b\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?\b", " ", text)
     text = re.sub(r"[^a-z\s]", " ", text)
-    words = [w for w in text.split() if len(w) > 1 and w not in _NOISE_WORDS]
+    words = [w for w in text.split() if len(w) > 1 and w not in _NOISE_WORDS and not re.fullmatch(r"x+", w)]
     return " ".join(words[:3])[:60]
 
 
@@ -59,3 +59,18 @@ def learn_rule(client, user_id: str, tx_type: str, label: str | None, category: 
         {"user_id": user_id, "tx_type": tx_type, "rule_key": key, "category": category}
     ).execute()
     return True
+
+
+def match_rule(rules: dict[tuple[str, str], str], tx_type: str, key: str) -> str | None:
+    """Catégorie apprise pour ce libellé : correspondance exacte, sinon la règle
+    la plus longue dont la clé est le début du libellé (une règle apprise sur
+    « escota » s'applique aussi à « escota vinci »)."""
+    if not key:
+        return None
+    if (tx_type, key) in rules:
+        return rules[(tx_type, key)]
+    best = None
+    for (rtype, rkey), category in rules.items():
+        if rtype == tx_type and key.startswith(rkey + " ") and (best is None or len(rkey) > len(best[0])):
+            best = (rkey, category)
+    return best[1] if best else None
