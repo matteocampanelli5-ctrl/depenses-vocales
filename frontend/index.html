@@ -1376,6 +1376,11 @@
           <button class="secondary" id="month-delete-btn">Supprimer</button>
         </div>
       </details>
+      <details class="month-delete" id="chain-box">
+        <summary>🔗 Virements en chaîne <span id="chain-count"></span></summary>
+        <p class="recurring-hint">Détecte quand tu fais passer de l'argent par un compte intermédiaire (ex. La Poste → BoursoBank → Bricks) et propose de les regrouper en un seul virement (La Poste → Bricks). Seuls les virements de même montant et aux dates identiques ou voisines (3 jours max) sont proposés.</p>
+        <div id="chain-list"></div>
+      </details>
       <div id="tx-list" class="tx-list"></div>
       <div id="empty-state" class="empty-state" style="display:none;">
         Rien pour l'instant — appuie sur le bouton + pour ajouter une dépense ou un revenu.
@@ -8183,6 +8188,7 @@
         loadRecurring();
         await loadAccounts();
         if (hadStructured) await loadLoans();
+        if (window.autoMergeSureChains) await window.autoMergeSureChains();
       } catch (err) {
         showToast("Erreur : " + err.message, true);
       } finally {
@@ -8657,6 +8663,84 @@
         if (!months.length) { const o = document.createElement("option"); o.textContent = "Aucune opération"; o.value = ""; monSel.appendChild(o); }
       } catch (err) { /* silencieux */ }
     }
+    // ---- Virements en chaîne : A→B puis B→C regroupés en A→C ----------------
+    function findTransferChains() {
+      const groups = [];
+      const rows = allRows.filter((r) => r.transfer_account_id && !r.loan_id)
+        .map((r) => { const [from, to] = transferDirection(r); return { r, from, to, amount: Math.abs(Number(r.amount)), date: r.expense_date }; })
+        .sort((a, b) => a.date.localeCompare(b.date));
+      // Un même virement lu sur les relevés des deux comptes = un seul groupe.
+      for (const x of rows) {
+        const g = groups.find((g) => g.from === x.from && g.to === x.to && Math.abs(g.amount - x.amount) < 0.01 && daysBetween(g.date, x.date) <= 5);
+        if (g) g.rows.push(x.r); else groups.push({ from: x.from, to: x.to, amount: x.amount, date: x.date, rows: [x.r] });
+      }
+      const pairs = [];
+      for (const g1 of groups) {
+        for (const g2 of groups) {
+          if (g1 === g2 || g1.to !== g2.from || g1.from === g2.to) continue;
+          if (Math.abs(g1.amount - g2.amount) >= 0.01) continue;
+          const diff = (Date.parse(g2.date + "T00:00:00") - Date.parse(g1.date + "T00:00:00")) / 86400000;
+          if (diff < -1 || diff > 3) continue;
+          pairs.push({ g1, g2, diff });
+        }
+      }
+      for (const p of pairs) {
+        const rival = pairs.filter((q) => q !== p && (q.g1 === p.g1 || q.g2 === p.g2)).length;
+        p.sure = rival === 0 && Math.abs(p.diff) <= 1 && p.g1.rows.length <= 2 && p.g2.rows.length <= 2;
+      }
+      return pairs;
+    }
+    async function mergeTransferChain(p) {
+      const first = p.g1.rows[0];
+      const payload = first.type === "income" ? { account_id: p.g2.to } : { transfer_account_id: p.g2.to };
+      await apiFetch(`/api/transactions/${first.id}`, { method: "PUT", body: JSON.stringify(payload) });
+      for (const r of [...p.g1.rows.slice(1), ...p.g2.rows]) {
+        await apiFetch(`/api/transactions/${r.id}`, { method: "DELETE" });
+      }
+    }
+    async function mergeChains(list) {
+      let done = 0;
+      const used = new Set();
+      for (const p of list) {
+        if (used.has(p.g1) || used.has(p.g2)) continue;
+        used.add(p.g1); used.add(p.g2);
+        await mergeTransferChain(p); done++;
+      }
+      if (done) { await loadTransactions(); await Promise.all([loadAccounts(), loadLoans()]); }
+      return done;
+    }
+    async function autoMergeSureChains() {
+      try {
+        const sure = findTransferChains().filter((p) => p.sure);
+        const n = await mergeChains(sure);
+        if (n) showToast(`${n} virement${n > 1 ? "s" : ""} en chaîne regroupé${n > 1 ? "s" : ""} automatiquement`);
+      } catch (err) { showToast("Regroupement des virements impossible : " + err.message, true); }
+      renderChains();
+    }
+    window.autoMergeSureChains = autoMergeSureChains; // appelée depuis le gestionnaire d'import, hors de ce bloc
+    function renderChains() {
+      const box = document.getElementById("chain-list");
+      if (!box) return;
+      const pairs = findTransferChains();
+      document.getElementById("chain-count").textContent = pairs.length ? `(${pairs.length})` : "";
+      box.innerHTML = "";
+      if (!pairs.length) { box.innerHTML = '<p class="recurring-hint">Aucune chaîne détectée.</p>'; return; }
+      for (const p of pairs) {
+        const row = document.createElement("div");
+        row.className = "account-card";
+        row.innerHTML = `<div class="account-card-name">${escapeHtml(accountName(p.g1.from))} → ${escapeHtml(accountName(p.g1.to))} → ${escapeHtml(accountName(p.g2.to))} · ${escapeHtml(currencyFormatter.format(p.g1.amount))}</div>` +
+          `<div class="account-card-status">${escapeHtml(p.g1.date)} puis ${escapeHtml(p.g2.date)} · ${p.sure ? "✅ correspondance sûre" : "⚠️ à confirmer (dates un peu éloignées ou plusieurs possibilités)"}</div>` +
+          `<button class="secondary">Regrouper en ${escapeHtml(accountName(p.g1.from))} → ${escapeHtml(accountName(p.g2.to))}</button>`;
+        row.querySelector("button").addEventListener("click", async (e) => {
+          e.target.disabled = true;
+          try { await mergeChains([p]); showToast("Virements regroupés"); }
+          catch (err) { showToast("Erreur : " + err.message, true); }
+          renderChains();
+        });
+        box.appendChild(row);
+      }
+    }
+    document.getElementById("chain-box").addEventListener("toggle", (e) => { if (e.target.open) renderChains(); });
     document.getElementById("month-delete").addEventListener("toggle", (e) => { if (e.target.open) refreshMonthDeleteOptions(); });
     document.getElementById("month-delete-account").addEventListener("change", refreshMonthDeleteOptions);
     document.getElementById("month-delete-btn").addEventListener("click", async () => {
