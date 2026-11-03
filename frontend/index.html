@@ -529,6 +529,9 @@
     border-bottom: 1px solid var(--border);
   }
   .import-row.excluded { opacity: 0.45; }
+  .import-row.needs-review { border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.10); padding-left: 0.5rem; border-radius: 6px; }
+  .import-row-issue { color: #f59e0b; font-size: 0.85rem; margin-top: 0.15rem; font-weight: 600; }
+  .review-bar { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem; margin: 0.5rem 0; border-radius: 10px; background: rgba(245, 158, 11, 0.14); border: 1px solid #f59e0b; font-size: 0.9rem; }
   .import-row-main { flex: 1; min-width: 0; }
   .import-row-desc { font-size: 0.88rem; font-weight: 500; }
   .import-row-desc .import-row-amount.expense { color: var(--danger); }
@@ -7267,11 +7270,64 @@
       }
     }
 
+
+    // Virements à vérifier : un libellé qui cite un de tes comptes alors que
+    // la ligne n'est pas rattachée à un virement, un virement qui pointe vers
+    // un autre compte que celui cité, ou un compte cité qu'on ne connaît pas.
+    let genericOnlyReview = false;
+    function normAccText(text) {
+      return String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+    }
+    function transferIssue(row) {
+      if (row.loan_id) return null;
+      const text = " " + normAccText(`${row.source_label || ""} ${row.description || ""}`) + " ";
+      const mentioned = allAccounts.filter((a) => {
+        const n = normAccText(a.name);
+        return n.length >= 3 && text.includes(" " + n + " ");
+      });
+      const others = mentioned.filter((a) => a.id !== genericImportAccountId);
+      const selfMentioned = mentioned.some((a) => a.id === genericImportAccountId);
+      if (row.transfer_account_id) {
+        if (mentioned.length && !mentioned.some((a) => a.id === row.transfer_account_id)) {
+          return `Conflit : le libellé cite « ${mentioned[0].name} » mais le virement est rattaché à « ${accountName(row.transfer_account_id) || "?"} »`;
+        }
+        return null;
+      }
+      if (others.length) {
+        return `Le libellé cite « ${others[0].name} » : virement entre tes comptes ? Choisis-le dans la liste`;
+      }
+      if (selfMentioned) {
+        return "Le libellé cite le compte de ce relevé lui-même : d'où ou vers où part ce virement ? Choisis l'autre compte";
+      }
+      if (/ (livret|epargne|placement|bricks|pea|assurance vie) /.test(text) && !others.length) {
+        return "Un compte semble cité (livret, placement…) mais il n'existe pas dans l'appli : crée-le d'abord, ou ignore";
+      }
+      return null;
+    }
+
     function renderGenericImportPreview() {
       genericRowsListEl.innerHTML = "";
+      const issueCount = genericImportRows.filter((r) => transferIssue(r)).length;
+      if (issueCount) {
+        const bar = document.createElement("div");
+        bar.className = "review-bar";
+        const label = document.createElement("span");
+        label.innerHTML = `⚠️ <strong>${issueCount}</strong> virement${issueCount > 1 ? "s" : ""} à vérifier (compte manquant ou en conflit)`;
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "secondary";
+        toggle.textContent = genericOnlyReview ? "Tout afficher" : "Voir seulement ceux-là";
+        toggle.addEventListener("click", () => { genericOnlyReview = !genericOnlyReview; renderGenericImportPreview(); });
+        bar.append(label, toggle);
+        genericRowsListEl.appendChild(bar);
+      } else {
+        genericOnlyReview = false;
+      }
       for (const row of genericImportRows) {
+        const issue = transferIssue(row);
+        if (genericOnlyReview && !issue) continue;
         const el = document.createElement("div");
-        el.className = "import-row" + (row.selected ? "" : " excluded");
+        el.className = "import-row" + (row.selected ? "" : " excluded") + (issue ? " needs-review" : "");
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
@@ -7326,6 +7382,12 @@
 
         main.appendChild(desc);
         main.appendChild(meta);
+        if (issue) {
+          const issueEl = document.createElement("div");
+          issueEl.className = "import-row-issue";
+          issueEl.textContent = "⚠️ " + issue;
+          main.appendChild(issueEl);
+        }
 
         // Une seule liste par ligne : soit une catégorie (vraie dépense ou
         // vrai revenu), soit "virement" vers/depuis un de tes comptes.
