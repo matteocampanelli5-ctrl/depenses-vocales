@@ -1593,6 +1593,7 @@
         <div id="workbook-structured-summary" class="import-summary" style="display:none;"></div>
         <button class="primary hidden" id="workbook-commit-btn" style="width:100%; margin-top:0.5rem;">Importer</button>
         <div id="generic-import-summary" class="import-summary" style="display:none;"></div>
+        <div id="generic-import-check" class="import-summary" style="display:none;"></div>
         <div id="generic-import-recurring-section" class="hidden">
           <h4 style="margin-bottom:0.25rem;">Dépenses qui semblent se répéter</h4>
           <div id="generic-import-recurring-list" class="recurring-candidates-list"></div>
@@ -7429,6 +7430,52 @@
       } catch (err) { showToast("Erreur : " + err.message, true); }
     });
 
+
+    // ---- Vérification par les soldes du relevé (PDF lisible en colonnes)
+    let genericImportChecks = []; // [{ fileName, ...statement_check }]
+    function renderImportChecks() {
+      const el = document.getElementById("generic-import-check");
+      const checks = genericImportChecks;
+      if (!checks.length) { el.style.display = "none"; el.innerHTML = ""; return; }
+      const eur = (v) => currencyFormatter.format(v);
+      const bad = checks.filter((c) => !c.ok);
+      const good = checks.filter((c) => c.ok);
+      let html = "";
+      if (good.length) {
+        html += good.length === 1
+          ? `✅ <strong>Les comptes tombent juste</strong> : solde ${escapeHtml(eur(good[0].opening))} → ${escapeHtml(eur(good[0].closing))} (fin de période ${escapeHtml(good[0].period_end || "?")}).`
+          : `✅ <strong>${good.length} relevé${good.length > 1 ? "s" : ""} tombent juste</strong> (départ + crédits − débits = solde de fin).`;
+      }
+      for (const c of bad) {
+        const who = c.fileName ? ` « ${escapeHtml(c.fileName)} »` : "";
+        const detail = Math.abs(c.columns_diff) < 0.01
+          ? `le relevé est cohérent mais l'IA a lu ${escapeHtml(eur(Math.abs(c.rows_diff)))} de ${c.rows_diff > 0 ? "trop" : "moins"} : une opération est en trop, manquante ou de mauvais sens`
+          : `écart de ${escapeHtml(eur(Math.abs(c.rows_diff)))} entre les opérations lues et les soldes du relevé`;
+        html += `${html ? "<br>" : ""}⚠️ Relevé${who} : ${detail}. Vérifie les lignes avant d'importer.`;
+      }
+      const accOk = genericImportAccountId && good.some((c) => c.period_end);
+      if (good.length) {
+        html += `<div class="checkbox-row" style="margin-top:0.4rem;"><label><input type="checkbox" id="import-save-balance" ${accOk ? "checked" : "disabled"}> Enregistrer ${good.length > 1 ? "les soldes de fin de chaque relevé" : "le solde de fin du relevé"} comme « solde réel » du compte</label></div>`;
+        if (!genericImportAccountId) html += `<span class="recurring-hint">Choisis « Ce relevé vient de » avant d'analyser pour activer cette option.</span>`;
+      }
+      el.innerHTML = html;
+      el.style.display = "block";
+    }
+
+    async function saveStatementBalances() {
+      const box = document.getElementById("import-save-balance");
+      if (!box || !box.checked || !genericImportAccountId) return 0;
+      let saved = 0;
+      for (const c of genericImportChecks) {
+        if (!c.ok || !c.period_end) continue;
+        const already = allBalances.some((b) => b.account_id === genericImportAccountId && b.balance_date === c.period_end);
+        if (already) continue;
+        await apiFetch(`/api/accounts/${genericImportAccountId}/balances`, { method: "POST", body: JSON.stringify({ balance_date: c.period_end, balance: c.closing }) });
+        saved += 1;
+      }
+      return saved;
+    }
+
     function renderGenericImportPreview() {
       genericRowsListEl.innerHTML = "";
       const issueCount = genericImportRows.filter((r) => transferIssue(r)).length;
@@ -7604,6 +7651,8 @@
       document.getElementById("workbook-commit-btn").classList.add("hidden");
       genericImportRows = [];
       genericImportCandidates = [];
+      genericImportChecks = [];
+      document.getElementById("generic-import-check").style.display = "none";
       workbookStructured = null;
     }
 
@@ -7657,6 +7706,8 @@
         decision: cand.classification === "credit" ? "credit" : cand.classification === "ended" ? "ignore" : "recurring",
         end_date: cand.suggested_end_date || null,
       }));
+      genericImportChecks = data.statement_check ? [{ fileName: file.name, ...data.statement_check }] : [];
+      renderImportChecks();
 
       let summary = `<strong>${genericImportRows.length}</strong> opération${genericImportRows.length > 1 ? "s" : ""} détectée${genericImportRows.length > 1 ? "s" : ""} par l'IA`;
       const transfers = genericImportRows.filter((r) => r.transfer_account_id).length;
@@ -7690,6 +7741,7 @@
       const candidates = [];
       const warnings = [];
       const failed = [];
+      const checks = [];
       let labels = null;
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -7706,6 +7758,7 @@
           }
           for (const cand of data.recurring_candidates || []) candidates.push({ ...cand, group_id: `f${i}-${cand.group_id}` });
           for (const w of data.warnings || []) warnings.push(`${file.name} : ${w}`);
+          if (data.statement_check) checks.push({ fileName: file.name, ...data.statement_check });
         } catch (err) {
           failed.push(`${file.name} (${err.message})`);
         }
@@ -7732,6 +7785,8 @@
       });
 
       genericImportCategoryLabels = labels || { expense: {}, income: {} };
+      genericImportChecks = checks;
+      renderImportChecks();
       genericImportRows = rows;
       genericImportCandidates = mergedCands.map((cand) => ({
         ...cand,
@@ -8100,12 +8155,19 @@
           if (result.inserted_transactions) parts.push(`${result.inserted_transactions} opération${result.inserted_transactions > 1 ? "s" : ""}`);
           if (result.inserted_recurring) parts.push(`${result.inserted_recurring} charge${result.inserted_recurring > 1 ? "s" : ""} récurrente${result.inserted_recurring > 1 ? "s" : ""}`);
         }
+        try {
+          const savedBalances = await saveStatementBalances();
+          if (savedBalances) parts.push(`${savedBalances} solde${savedBalances > 1 ? "s" : ""} réel${savedBalances > 1 ? "s" : ""}`);
+        } catch (balErr) {
+          showToast("Opérations importées, mais solde réel non enregistré : " + balErr.message, true);
+        }
         showToast(parts.length ? `Importé : ${parts.join(", ")}` : "Import terminé");
         const hadStructured = Boolean(workbookStructured);
         finishImport();
         await loadTransactions();
         loadRecurring();
-        if (hadStructured) await Promise.all([loadLoans(), loadAccounts()]);
+        await loadAccounts();
+        if (hadStructured) await loadLoans();
       } catch (err) {
         showToast("Erreur : " + err.message, true);
       } finally {

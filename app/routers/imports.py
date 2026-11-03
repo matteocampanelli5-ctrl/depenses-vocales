@@ -293,6 +293,57 @@ def _annotate_pdf_columns(raw_bytes: bytes) -> str | None:
 
 
 
+def _fr_amount(text: str) -> float | None:
+    """« 1.216,10 », « -678,30 », « 1 216,10 » -> float."""
+    cleaned = text.replace("\u00a0", "").replace(" ", "")
+    negative = cleaned.startswith("-")
+    cleaned = cleaned.lstrip("-").replace(".", "").replace(",", ".")
+    try:
+        value = float(cleaned)
+    except ValueError:
+        return None
+    return -value if negative else value
+
+
+def _read_statement_balances(annotated: str) -> dict | None:
+    """Soldes d'un relevé PDF lisible en colonnes : solde de départ, solde de
+    fin, fin de période, et totaux des colonnes. Sert à vérifier mécaniquement
+    que les opérations lues tombent juste (départ + crédits − débits = fin).
+    None si le relevé n'affiche pas ces deux soldes."""
+    opening = re.search(r"SOLDE\s*AU\s*:\s*(\d{2}/\d{2}/\d{4})\s*(-?\s*[\d.]+,\d{2})", annotated, re.IGNORECASE)
+    closing = re.search(r"Nouveau\s*solde\s*(?:en\s*EUR)?\s*:\s*(-?\s*[\d.]+,\d{2})", annotated, re.IGNORECASE)
+    if not opening or not closing:
+        return None
+    opening_amount, closing_amount = _fr_amount(opening.group(2)), _fr_amount(closing.group(1))
+    if opening_amount is None or closing_amount is None:
+        return None
+    period = re.search(r"du\s*(\d{2}/\d{2}/\d{4})\s*au\s*(\d{2}/\d{2}/\d{4})", annotated)
+    period_end = None
+    if period:
+        d, m, y = period.group(2).split("/")
+        period_end = f"{y}-{m}-{d}"
+    debits = credits = 0.0
+    for line in annotated.split("\n"):
+        tag = "[CRÉDIT]" if line.endswith("[CRÉDIT]") else "[DÉBIT]" if line.endswith("[DÉBIT]") else None
+        if not tag:
+            continue
+        tokens = [t for t in line[: -len(tag)].split() if re.fullmatch(r"-?\d[\d.]*,\d{2}", t)]
+        value = _fr_amount(tokens[-1]) if tokens else None
+        if value is None:
+            continue
+        if tag == "[CRÉDIT]":
+            credits += abs(value)
+        else:
+            debits += abs(value)
+    return {
+        "opening": round(opening_amount, 2),
+        "closing": round(closing_amount, 2),
+        "period_end": period_end,
+        "credits": round(credits, 2),
+        "debits": round(debits, 2),
+    }
+
+
 _GENERIC_IMPORT_SYSTEM_PROMPT_TEMPLATE = """Tu reçois le contenu brut d'un fichier de suivi de finances personnelles (export Excel ou CSV), dont la structure n'est PAS standardisée — ce n'est pas forcément un relevé bancaire classique avec une colonne par champ. Il peut par exemple s'agir d'un tableau par mois (avec un titre de section indiquant le mois), sans date précise par opération, sans catégorie, juste un nom de dépense et un montant.
 
 Ta tâche : repérer TOUTES les opérations (dépenses et revenus) présentes dans ce texte et les restituer sous forme d'une liste structurée.
@@ -544,10 +595,12 @@ async def preview_generic_import(
     if len(raw_bytes) > max_size:
         raise HTTPException(status_code=400, detail=f"Fichier trop volumineux ({max_size // (1024 * 1024)} Mo maximum)")
 
+    statement_balances = None
     if is_pdf:
         if not raw_bytes.startswith(b"%PDF"):
             raise HTTPException(status_code=400, detail="Ce fichier n'est pas un PDF valide")
         annotated = _annotate_pdf_columns(raw_bytes)
+        statement_balances = _read_statement_balances(annotated) if annotated else None
         ai_content: str | list[dict] = _mask_sensitive_numbers(annotated) if annotated else [
             {
                 "type": "document",
@@ -743,8 +796,25 @@ async def preview_generic_import(
     if truncated:
         warnings.append(f"Fichier très volumineux : seules les {MAX_GENERIC_IMPORT_ENTRIES} premières opérations détectées ont été gardées")
 
+    statement_check = None
+    if statement_balances:
+        expected_net = round(statement_balances["closing"] - statement_balances["opening"], 2)
+        rows_net = round(
+            sum(r["amount"] if r["type"] == "income" else -r["amount"] for r in parsed), 2
+        )
+        columns_net = round(statement_balances["credits"] - statement_balances["debits"], 2)
+        statement_check = {
+            **statement_balances,
+            "expected_net": expected_net,
+            "rows_net": rows_net,
+            "rows_diff": round(rows_net - expected_net, 2),
+            "columns_diff": round(columns_net - expected_net, 2),
+            "ok": abs(rows_net - expected_net) < 0.01,
+        }
+
     return {
         "rows": parsed,
+        "statement_check": statement_check,
         "recurring_candidates": recurring_candidates,
         "warnings": warnings,
         "expense_categories": {
