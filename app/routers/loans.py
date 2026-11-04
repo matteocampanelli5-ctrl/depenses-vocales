@@ -46,7 +46,7 @@ def active_loans(client, user_id: str) -> list[dict]:
     return [
         loan
         for loan in client.table("property_loans")
-        .select("id, property_name, monthly_payment, active")
+        .select("id, property_name, monthly_payment, monthly_insurance, active")
         .eq("user_id", user_id)
         .execute()
         .data
@@ -81,6 +81,10 @@ def match_loan_for_payment(
     for loan in loans:
         payment = float(loan["monthly_payment"])
         gap = abs(amount - payment)
+        insurance = float(loan.get("monthly_insurance") or 0)
+        if insurance > 0 and hinted and abs(amount - insurance) <= 0.01:
+            candidates.append(loan)  # prélèvement de l'assurance du prêt
+            continue
         if (amount_only_ok and payment >= 50 and gap <= 0.005 * payment) or (hinted and gap <= 0.02 * payment):
             candidates.append(loan)
     if len(candidates) == 1:
@@ -120,6 +124,9 @@ def create_property_loan(item: PropertyLoanIn, user_id: str = Depends(require_us
         "monthly_payment": item.monthly_payment,
         "start_date": item.start_date.isoformat(),
         "monthly_rent": item.monthly_rent,
+        "deferral_months": item.deferral_months,
+        "duration_months": item.duration_months,
+        "monthly_insurance": item.monthly_insurance,
         "active": True,
     }
     result = client.table("property_loans").insert(payload).execute()
@@ -134,7 +141,7 @@ def update_property_loan(
     payload: dict = {}
     data = item.model_dump(exclude_unset=True)
     for key, value in data.items():
-        if value is None and key != "monthly_rent":
+        if value is None and key not in ("monthly_rent", "duration_months", "monthly_insurance"):
             continue  # null = pas touché (sauf le loyer, qu'on peut retirer)
         if isinstance(value, date):
             payload[key] = value.isoformat()

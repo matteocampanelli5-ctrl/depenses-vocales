@@ -1964,8 +1964,20 @@
         <input type="number" id="loan-input-payment" step="0.01" min="0.01" placeholder="600.47" inputmode="decimal">
       </div>
       <div>
-        <label for="loan-input-start-date">Date de la 1ère échéance</label>
+        <label for="loan-input-start-date">Date de la 1ère échéance de remboursement</label>
         <input type="date" id="loan-input-start-date">
+      </div>
+      <div>
+        <label for="loan-input-deferral">Franchise : mois sans remboursement avant la 1ère échéance (optionnel)</label>
+        <input type="number" id="loan-input-deferral" step="1" min="0" placeholder="Ex : 48 (les intérêts s'ajoutent à la dette)" inputmode="numeric">
+      </div>
+      <div>
+        <label for="loan-input-duration">Nombre de mensualités de remboursement (optionnel)</label>
+        <input type="number" id="loan-input-duration" step="1" min="1" placeholder="Ex : 72" inputmode="numeric">
+      </div>
+      <div>
+        <label for="loan-input-insurance">Assurance du prêt par mois (€, optionnel)</label>
+        <input type="number" id="loan-input-insurance" step="0.01" min="0" placeholder="Ex : 15,83" inputmode="decimal">
       </div>
       <div>
         <label for="loan-input-rent">Loyer mensuel perçu (€, optionnel)</label>
@@ -6074,6 +6086,9 @@
     const loanPaymentInput = document.getElementById("loan-input-payment");
     const loanStartDateInput = document.getElementById("loan-input-start-date");
     const loanRentInput = document.getElementById("loan-input-rent");
+    const loanDeferralInput = document.getElementById("loan-input-deferral");
+    const loanDurationInput = document.getElementById("loan-input-duration");
+    const loanInsuranceInput = document.getElementById("loan-input-insurance");
     const loanEndedInput = document.getElementById("loan-input-ended");
     const loanSaveBtn = document.getElementById("loan-btn-save");
 
@@ -6092,30 +6107,62 @@
     function computeLoanAmortization(loan) {
       const monthlyRate = Number(loan.annual_rate_pct) / 100 / 12;
       const payment = Number(loan.monthly_payment);
+      const deferral = Math.max(0, parseInt(loan.deferral_months, 10) || 0);
+      const duration = parseInt(loan.duration_months, 10) || null;
       let remaining = Number(loan.principal_amount);
       const [y, m] = loan.start_date.split("-").map(Number);
       const schedule = [];
       let cumulInterest = 0;
       const MAX_MONTHS = 600;
 
+      // Franchise totale : pas de remboursement, les intérêts s'ajoutent au
+      // capital (la dette grossit) jusqu'à la 1re échéance.
+      for (let k = 0; k < deferral; k++) {
+        const interest = remaining * monthlyRate;
+        remaining += interest;
+        cumulInterest += interest;
+        schedule.push({
+          date: new Date(y, m - 1 - deferral + k, 1),
+          installmentNumber: k + 1,
+          payment: 0,
+          interest,
+          capitalRepaid: -interest,
+          remaining,
+          cumulInterest,
+        });
+      }
+
       for (let i = 0; i < MAX_MONTHS && remaining > 0.01; i++) {
         const interest = remaining * monthlyRate;
         let capitalRepaid = payment - interest;
         if (capitalRepaid <= 0) break; // mensualité ne couvre pas les intérêts : schéma incohérent, on arrête là
-        if (capitalRepaid > remaining) capitalRepaid = remaining;
+        // Dernière échéance prévue : elle solde le reste (arrondis de la banque).
+        if (capitalRepaid > remaining || (duration && i === duration - 1)) capitalRepaid = remaining;
         remaining = Math.max(0, remaining - capitalRepaid);
         cumulInterest += interest;
         schedule.push({
           date: new Date(y, m - 1 + i, 1),
-          installmentNumber: i + 1,
+          installmentNumber: deferral + i + 1,
           payment,
           interest,
           capitalRepaid,
           remaining,
           cumulInterest,
         });
+        if (duration && i === duration - 1) break;
       }
       return schedule;
+    }
+
+    // Franchise en cours ? (1re échéance de remboursement pas encore arrivée)
+    function loanInDeferral(loan, todayStr) {
+      return Number(loan.deferral_months) > 0 && loan.start_date > todayStr;
+    }
+    // Ce qui est réellement prélevé chaque mois en ce moment (assurance
+    // seule pendant la franchise, mensualité + assurance ensuite).
+    function loanMonthlyNow(loan, todayStr) {
+      const ins = Number(loan.monthly_insurance) || 0;
+      return (loanInDeferral(loan, todayStr) ? 0 : Number(loan.monthly_payment)) + ins;
     }
 
     // Point de la grille d'amortissement le plus proche d'aujourd'hui (sans
@@ -6160,7 +6207,7 @@
         const active = loan.active !== false;
         if (active && !state.finished) {
           totalRemaining += state.remaining;
-          totalMonthlyPayment += Number(loan.monthly_payment);
+          totalMonthlyPayment += loanMonthlyNow(loan, today);
         }
         if (active && loan.monthly_rent != null) totalRent += Number(loan.monthly_rent);
 
@@ -6206,7 +6253,14 @@
           span.innerHTML = `${label} : <strong>${value}</strong>`;
           return span;
         };
-        stats.appendChild(mkStat("Mensualité", currencyFormatter.format(loan.monthly_payment)));
+        {
+          const ins = Number(loan.monthly_insurance) || 0;
+          if (loanInDeferral(loan, today)) {
+            stats.appendChild(mkStat("Mensualité", `${currencyFormatter.format(ins)} d'assurance seule (franchise jusqu'à ${monthYearLabel(loan.start_date)}), puis ${currencyFormatter.format(Number(loan.monthly_payment) + ins)}`));
+          } else {
+            stats.appendChild(mkStat("Mensualité", currencyFormatter.format(Number(loan.monthly_payment) + ins) + (ins ? ` (dont ${currencyFormatter.format(ins)} d'assurance)` : "")));
+          }
+        }
         if (!active && !state.finished) {
           stats.appendChild(mkStat("Statut", "terminé (vendu ou remboursé)"));
         } else {
@@ -6220,7 +6274,7 @@
           const rent = Number(loan.monthly_rent);
           stats.appendChild(mkStat("Loyer", currencyFormatter.format(rent)));
           if (active && !state.finished) {
-            const net = rent - Number(loan.monthly_payment);
+            const net = rent - loanMonthlyNow(loan, today);
             stats.appendChild(mkStat("Loyer − mensualité", (net >= 0 ? "+" : "") + currencyFormatter.format(net)));
           }
         }
@@ -6328,6 +6382,9 @@
       loanPaymentInput.value = loan ? loan.monthly_payment : "";
       loanStartDateInput.value = loan ? loan.start_date : "";
       loanRentInput.value = loan && loan.monthly_rent != null ? Number(loan.monthly_rent) : "";
+      loanDeferralInput.value = loan && Number(loan.deferral_months) ? Number(loan.deferral_months) : "";
+      loanDurationInput.value = loan && loan.duration_months ? Number(loan.duration_months) : "";
+      loanInsuranceInput.value = loan && loan.monthly_insurance != null ? Number(loan.monthly_insurance) : "";
       loanEndedInput.checked = Boolean(loan && loan.active === false);
       document.getElementById("loan-ended-wrap").classList.toggle("hidden", !loan);
       loanOverlayEl.classList.remove("hidden");
@@ -6365,6 +6422,9 @@
         monthly_payment: payment,
         start_date: startDate,
         monthly_rent: rent,
+        deferral_months: parseInt(loanDeferralInput.value, 10) || 0,
+        duration_months: parseInt(loanDurationInput.value, 10) || null,
+        monthly_insurance: loanInsuranceInput.value.trim() === "" ? null : parseFloat(loanInsuranceInput.value),
       };
       if (editingLoanId) payload.active = !loanEndedInput.checked;
 
@@ -8405,6 +8465,7 @@
       const state = loanStateAsOf(schedule, loan, todayIso());
       const r = Number(loan.annual_rate_pct) / 100 / 12;
       const pay = Number(loan.monthly_payment);
+      if (loanInDeferral(loan, todayIso())) return { remaining: state.remaining, base: null, after: null };
       const run = (balance) => {
         let months = 0, interest = 0;
         while (balance > 0.005 && months < 1200) {

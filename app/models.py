@@ -170,6 +170,9 @@ class PropertyLoanIn(BaseModel):
     monthly_payment: float = Field(gt=0)
     start_date: date
     monthly_rent: float | None = Field(default=None, ge=0)
+    deferral_months: int = Field(default=0, ge=0, le=240)
+    duration_months: int | None = Field(default=None, ge=1, le=600)
+    monthly_insurance: float | None = Field(default=None, ge=0)
 
 
 class PropertyLoanUpdate(BaseModel):
@@ -180,6 +183,9 @@ class PropertyLoanUpdate(BaseModel):
     start_date: date | None = None
     active: bool | None = None
     monthly_rent: float | None = Field(default=None, ge=0)
+    deferral_months: int | None = Field(default=None, ge=0, le=240)
+    duration_months: int | None = Field(default=None, ge=1, le=600)
+    monthly_insurance: float | None = Field(default=None, ge=0)
 
 
 class VoiceParseRequest(BaseModel):
