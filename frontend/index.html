@@ -8822,8 +8822,8 @@
     function findDuplicateGroups() {
       const groups = new Map();
       for (const r of allRows) {
-        if (r.transfer_account_id || !r.account_id) continue;
-        const key = [r.account_id, r.expense_date, r.type, Number(r.amount).toFixed(2)].join("|");
+        if (!r.account_id) continue;
+        const key = [r.account_id, r.expense_date, r.type, Number(r.amount).toFixed(2), r.transfer_account_id || ""].join("|");
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(r);
       }
