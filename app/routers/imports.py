@@ -849,6 +849,14 @@ async def preview_generic_import(
         warnings.append(f"{skipped} ligne(s) ignorée(s) par l'IA car illisibles")
     if truncated:
         warnings.append(f"Fichier très volumineux : seules les {MAX_GENERIC_IMPORT_ENTRIES} premières opérations détectées ont été gardées")
+    try:
+        links = _find_transfer_links(client, user_id, str(statement_account) if statement_account else None, parsed)
+    except Exception:  # noqa: BLE001 - simple information, ne doit jamais bloquer l'analyse
+        links = {}
+    if links:
+        warnings.append(
+            f"{len(links)} virement(s) déjà enregistré(s) depuis l'autre compte : ils seront reliés à l'import, sans doublon (garde-les cochés)."
+        )
 
     statement_check = None
     if statement_balances:
@@ -890,50 +898,54 @@ def _plain_label(text: str | None) -> str:
     return "".join(c for c in text if unicodedata.category(c) != "Mn").lower()
 
 
-def _link_existing_transfers(client, user_id: str, account_id: str | None, rows: list) -> set[int]:
-    """Virements entre comptes déjà importés de l'autre côté.
+def _find_transfer_links(client, user_id: str, account_id: str | None, rows: list[dict]) -> dict[int, dict]:
+    """Pour chaque ligne du relevé de `account_id` qui est en fait un virement
+    déjà enregistré depuis l'autre compte, renvoie {position: opération
+    existante}. `rows` : dicts avec expense_date (date), type, amount,
+    description, source_label, transfer_account_id, loan_id.
 
-    Une ligne « virement » du relevé de ce compte qui correspond à UNE SEULE
-    opération déjà enregistrée sur un autre compte (sens inverse, même
-    montant, dates identiques ou à 3 jours près, libellés de virement des deux
-    côtés) est le même mouvement d'argent vu des deux relevés : l'opération
-    existante devient un virement entre les deux comptes et la nouvelle ligne
-    n'est pas ajoutée (sinon elle compterait deux fois). Au moindre doute
-    (plusieurs correspondances possibles), rien n'est lié.
-    Renvoie les positions des lignes absorbées."""
+    Une ligne « virement » qui correspond à UNE SEULE opération déjà
+    enregistrée sur un autre compte (sens inverse, même montant, dates
+    identiques ou à 3 jours près, libellés de virement des deux côtés) est le
+    même mouvement d'argent vu des deux relevés. L'opération existante est soit
+    à relier (`needs_link`), soit déjà un virement vers ce compte. Au moindre
+    doute (plusieurs correspondances possibles), rien n'est lié."""
     if not account_id or not rows:
-        return set()
-    dates = [row.expense_date for row in rows]
-    lo, hi = min(dates), max(dates)
+        return {}
     from datetime import timedelta
+    dates = [row["expense_date"] for row in rows]
     existing = (
         client.table("transactions")
         .select("id, type, amount, description, expense_date, account_id, transfer_account_id, loan_id, recurring_expense_id")
         .eq("user_id", user_id)
-        .gte("expense_date", (lo - timedelta(days=3)).isoformat())
-        .lte("expense_date", (hi + timedelta(days=3)).isoformat())
+        .gte("expense_date", (min(dates) - timedelta(days=3)).isoformat())
+        .lte("expense_date", (max(dates) + timedelta(days=3)).isoformat())
         .execute()
         .data
     )
-    existing = [
-        e for e in existing
-        if e.get("account_id") and e["account_id"] != account_id
-        and not e.get("transfer_account_id") and not e.get("loan_id") and not e.get("recurring_expense_id")
-        and _TRANSFER_WORDS.search(_plain_label(e.get("description")))
-    ]
+    candidates = []
+    for e in existing:
+        if not e.get("account_id") or e["account_id"] == account_id or e.get("loan_id") or e.get("recurring_expense_id"):
+            continue
+        if not _TRANSFER_WORDS.search(_plain_label(e.get("description"))):
+            continue
+        if not e.get("transfer_account_id"):
+            candidates.append({**e, "needs_link": True})
+        elif e["transfer_account_id"] == account_id:
+            candidates.append({**e, "needs_link": False})  # déjà relié à ce compte
     matches: dict[int, list[dict]] = {}
     for idx, row in enumerate(rows):
-        if row.transfer_account_id or row.loan_id:
+        if row.get("transfer_account_id") or row.get("loan_id"):
             continue
-        if not _TRANSFER_WORDS.search(_plain_label(f"{row.source_label or ''} {row.description or ''}")):
+        if not _TRANSFER_WORDS.search(_plain_label(f"{row.get('source_label') or ''} {row.get('description') or ''}")):
             continue
         matches[idx] = [
-            e for e in existing
-            if e["type"] != row.type
-            and abs(float(e["amount"]) - float(row.amount)) < 0.01
-            and abs((date.fromisoformat(e["expense_date"]) - row.expense_date).days) <= 3
+            e for e in candidates
+            if e["type"] != row["type"]
+            and abs(float(e["amount"]) - float(row["amount"])) < 0.01
+            and abs((date.fromisoformat(e["expense_date"]) - row["expense_date"]).days) <= 3
         ]
-    absorbed: set[int] = set()
+    found: dict[int, dict] = {}
     used: set[str] = set()
     for idx, cands in matches.items():
         if len(cands) != 1 or cands[0]["id"] in used:
@@ -943,12 +955,30 @@ def _link_existing_transfers(client, user_id: str, account_id: str | None, rows:
         # seule ligne du relevé.
         if sum(1 for c in matches.values() if any(x["id"] == other["id"] for x in c)) != 1:
             continue
-        client.table("transactions").update(
-            {"transfer_account_id": account_id, "category": TRANSFER_CATEGORY}
-        ).eq("id", other["id"]).eq("user_id", user_id).execute()
         used.add(other["id"])
-        absorbed.add(idx)
-    return absorbed
+        found[idx] = other
+    return found
+
+
+def _link_existing_transfers(client, user_id: str, account_id: str | None, rows: list) -> set[int]:
+    """Applique `_find_transfer_links` à l'import : relie l'opération existante
+    si besoin, et renvoie les positions des lignes absorbées (à ne pas
+    ajouter, sinon le virement compterait deux fois)."""
+    plain = [
+        {
+            "expense_date": r.expense_date, "type": r.type, "amount": r.amount,
+            "description": r.description, "source_label": r.source_label,
+            "transfer_account_id": r.transfer_account_id, "loan_id": r.loan_id,
+        }
+        for r in rows
+    ]
+    found = _find_transfer_links(client, user_id, account_id, plain)
+    for other in found.values():
+        if other["needs_link"]:
+            client.table("transactions").update(
+                {"transfer_account_id": account_id, "category": TRANSFER_CATEGORY}
+            ).eq("id", other["id"]).eq("user_id", user_id).execute()
+    return set(found)
 
 
 @router.post("/api/import/generic/commit", status_code=201)
