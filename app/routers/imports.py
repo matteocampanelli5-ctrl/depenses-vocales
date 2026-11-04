@@ -875,6 +875,75 @@ async def preview_generic_import(
     }
 
 
+_TRANSFER_WORDS = re.compile(r"\b(vir|virt|vrt|virement|virements)\b")
+
+
+def _plain_label(text: str | None) -> str:
+    text = unicodedata.normalize("NFD", text or "")
+    return "".join(c for c in text if unicodedata.category(c) != "Mn").lower()
+
+
+def _link_existing_transfers(client, user_id: str, account_id: str | None, rows: list) -> set[int]:
+    """Virements entre comptes déjà importés de l'autre côté.
+
+    Une ligne « virement » du relevé de ce compte qui correspond à UNE SEULE
+    opération déjà enregistrée sur un autre compte (sens inverse, même
+    montant, dates identiques ou à 3 jours près, libellés de virement des deux
+    côtés) est le même mouvement d'argent vu des deux relevés : l'opération
+    existante devient un virement entre les deux comptes et la nouvelle ligne
+    n'est pas ajoutée (sinon elle compterait deux fois). Au moindre doute
+    (plusieurs correspondances possibles), rien n'est lié.
+    Renvoie les positions des lignes absorbées."""
+    if not account_id or not rows:
+        return set()
+    dates = [row.expense_date for row in rows]
+    lo, hi = min(dates), max(dates)
+    from datetime import timedelta
+    existing = (
+        client.table("transactions")
+        .select("id, type, amount, description, expense_date, account_id, transfer_account_id, loan_id, recurring_expense_id")
+        .eq("user_id", user_id)
+        .gte("expense_date", (lo - timedelta(days=3)).isoformat())
+        .lte("expense_date", (hi + timedelta(days=3)).isoformat())
+        .execute()
+        .data
+    )
+    existing = [
+        e for e in existing
+        if e.get("account_id") and e["account_id"] != account_id
+        and not e.get("transfer_account_id") and not e.get("loan_id") and not e.get("recurring_expense_id")
+        and _TRANSFER_WORDS.search(_plain_label(e.get("description")))
+    ]
+    matches: dict[int, list[dict]] = {}
+    for idx, row in enumerate(rows):
+        if row.transfer_account_id or row.loan_id:
+            continue
+        if not _TRANSFER_WORDS.search(_plain_label(f"{row.source_label or ''} {row.description or ''}")):
+            continue
+        matches[idx] = [
+            e for e in existing
+            if e["type"] != row.type
+            and abs(float(e["amount"]) - float(row.amount)) < 0.01
+            and abs((date.fromisoformat(e["expense_date"]) - row.expense_date).days) <= 3
+        ]
+    absorbed: set[int] = set()
+    used: set[str] = set()
+    for idx, cands in matches.items():
+        if len(cands) != 1 or cands[0]["id"] in used:
+            continue
+        other = cands[0]
+        # Réciproque : cette opération existante ne doit correspondre qu'à une
+        # seule ligne du relevé.
+        if sum(1 for c in matches.values() if any(x["id"] == other["id"] for x in c)) != 1:
+            continue
+        client.table("transactions").update(
+            {"transfer_account_id": account_id, "category": TRANSFER_CATEGORY}
+        ).eq("id", other["id"]).eq("user_id", user_id).execute()
+        used.add(other["id"])
+        absorbed.add(idx)
+    return absorbed
+
+
 @router.post("/api/import/generic/commit", status_code=201)
 def commit_generic_import(req: GenericImportCommitRequest, user_id: str = Depends(require_user)) -> dict:
     if not req.transactions and not req.recurring:
@@ -895,9 +964,14 @@ def commit_generic_import(req: GenericImportCommitRequest, user_id: str = Depend
     if any(row.loan_id and str(row.loan_id) not in own_loan_ids for row in req.transactions):
         raise HTTPException(status_code=400, detail="Prêt introuvable")
 
+    linked_transfers = 0
     if req.transactions:
+        absorbed = _link_existing_transfers(client, user_id, account_id, req.transactions)
+        linked_transfers = len(absorbed)
         payload = []
-        for row in req.transactions:
+        for position, row in enumerate(req.transactions):
+            if position in absorbed:
+                continue
             # Un "virement" vers le compte du relevé lui-même n'en est pas un :
             # la ligne redevient une dépense/un revenu normal ("autre").
             transfer_id = (
@@ -938,8 +1012,9 @@ def commit_generic_import(req: GenericImportCommitRequest, user_id: str = Depend
             })
             if row.learn_rule and not transfer_id and not loan_id and category not in (TRANSFER_CATEGORY, LOAN_CATEGORY):
                 learn_rule(client, user_id, row.type, row.source_label or row.description, category)
-        result = client.table("transactions").insert(payload).execute()
-        inserted_transactions = len(result.data)
+        if payload:
+            result = client.table("transactions").insert(payload).execute()
+            inserted_transactions = len(result.data)
 
     if req.recurring:
         payload = [
@@ -959,7 +1034,11 @@ def commit_generic_import(req: GenericImportCommitRequest, user_id: str = Depend
         result = client.table("recurring_expenses").insert(payload).execute()
         inserted_recurring = len(result.data)
 
-    return {"inserted_transactions": inserted_transactions, "inserted_recurring": inserted_recurring}
+    return {
+        "inserted_transactions": inserted_transactions,
+        "inserted_recurring": inserted_recurring,
+        "linked_transfers": linked_transfers,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -8224,7 +8224,7 @@
           // Par paquets de 500 (limite du serveur : 600) ; les récurrentes
           // partent avec le premier paquet seulement.
           const CHUNK = 500;
-          const result = { inserted_transactions: 0, inserted_recurring: 0 };
+          const result = { inserted_transactions: 0, inserted_recurring: 0, linked_transfers: 0 };
           const allTx = payload.transactions;
           for (let start = 0; start === 0 || start < allTx.length; start += CHUNK) {
             const part = await apiFetch("/api/import/generic/commit", {
@@ -8237,8 +8237,10 @@
             });
             result.inserted_transactions += part.inserted_transactions || 0;
             result.inserted_recurring += part.inserted_recurring || 0;
+            result.linked_transfers += part.linked_transfers || 0;
           }
           if (result.inserted_transactions) parts.push(`${result.inserted_transactions} opération${result.inserted_transactions > 1 ? "s" : ""}`);
+          if (result.linked_transfers) parts.push(`${result.linked_transfers} virement${result.linked_transfers > 1 ? "s" : ""} relié${result.linked_transfers > 1 ? "s" : ""} à l'autre compte`);
           if (result.inserted_recurring) parts.push(`${result.inserted_recurring} charge${result.inserted_recurring > 1 ? "s" : ""} récurrente${result.inserted_recurring > 1 ? "s" : ""}`);
         }
         try {
