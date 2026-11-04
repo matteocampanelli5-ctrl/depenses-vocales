@@ -24,7 +24,7 @@ import io
 import json
 import re
 import unicodedata
-from datetime import date
+from datetime import date, timedelta
 from io import BytesIO
 from uuid import UUID
 
@@ -827,8 +827,8 @@ async def preview_generic_import(
         client.table("transactions")
         .select("expense_date, amount, type, account_id")
         .eq("user_id", user_id)
-        .gte("expense_date", min_date.isoformat())
-        .lte("expense_date", max_date.isoformat())
+        .gte("expense_date", (min_date - timedelta(days=31)).isoformat())
+        .lte("expense_date", (max_date + timedelta(days=31)).isoformat())
     )
     if statement_account:
         existing_query = existing_query.eq("account_id", str(statement_account))
@@ -843,6 +843,7 @@ async def preview_generic_import(
     for row in existing:
         key = (row["expense_date"], round(float(row["amount"]), 2), row["type"])
         remaining[key] = remaining.get(key, 0) + 1
+    pending = []
     for row in parsed:
         key = (row["expense_date"].isoformat(), row["amount"], row["type"])
         if remaining.get(key, 0) > 0:
@@ -850,6 +851,25 @@ async def preview_generic_import(
             row["likely_duplicate"] = True
         else:
             row["likely_duplicate"] = False
+            pending.append(row)
+    # Lignes dont le jour est incertain (le relevé donne la date de valeur, le
+    # libellé une autre date, ou seul le mois est lu) : on les rapproche d'une
+    # opération identique restante à 1 jour près, ou du même mois si le jour
+    # n'est pas précisé.
+    for row in pending:
+        month_only = row.get("date_precision") != "day"
+        best = None
+        for (d, amount, kind), left in remaining.items():
+            if left <= 0 or kind != row["type"] or abs(amount - row["amount"]) >= 0.01:
+                continue
+            gap = abs((date.fromisoformat(d) - row["expense_date"]).days)
+            same_month = d[:7] == row["expense_date"].isoformat()[:7]
+            if month_only and (gap <= 1 or same_month):
+                if best is None or gap < best[0]:
+                    best = (gap, (d, amount, kind))
+        if best:
+            remaining[best[1]] -= 1
+            row["likely_duplicate"] = True
 
     warnings = [w for w in (ai_data.get("warnings") or []) if isinstance(w, str)]
     if skipped:
