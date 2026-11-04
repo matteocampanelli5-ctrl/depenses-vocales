@@ -8745,7 +8745,11 @@
         .sort((a, b) => a.date.localeCompare(b.date));
       // Un même virement lu sur les relevés des deux comptes = un seul groupe.
       for (const x of rows) {
-        const g = groups.find((g) => g.from === x.from && g.to === x.to && Math.abs(g.amount - x.amount) < 0.01 && daysBetween(g.date, x.date) <= 5);
+        // Les deux lectures d'un même virement viennent de deux relevés
+        // différents : deux lignes du MÊME compte ne sont jamais le même virement
+        // (ex : deux virements de 100 € à un jour d'écart).
+        const g = groups.find((g) => g.from === x.from && g.to === x.to && Math.abs(g.amount - x.amount) < 0.01 && daysBetween(g.date, x.date) <= 5
+          && !g.rows.some((o) => o.account_id === x.r.account_id));
         if (g) g.rows.push(x.r); else groups.push({ from: x.from, to: x.to, amount: x.amount, date: x.date, rows: [x.r] });
       }
       const pairs = [];
