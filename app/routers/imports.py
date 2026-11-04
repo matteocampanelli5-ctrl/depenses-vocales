@@ -375,7 +375,7 @@ Ta tâche : repérer TOUTES les opérations (dépenses et revenus) présentes da
 
 Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour, SUR UNE SEULE LIGNE (aucune indentation ni retour à la ligne), selon ce schéma. Les clés sont volontairement courtes : respecte-les exactement.
 {"e":[{"d":"libellé court et lisible (nettoyé, sans le montant)","s":"texte brut EXACT de la ligne tel qu'il apparaît dans le fichier (sert à détecter des motifs comme un numéro d'échéance ; ne le modifie pas)","a":nombre positif,"t":"expense" ou "income","c":une chaîne parmi __ALL_CATEGORIES__ — ta meilleure estimation, "autre" si aucune ne correspond clairement,"m":"YYYY-MM" (mois de l'opération, déduit du contexte),"y":jour du mois en nombre entier UNIQUEMENT si une date précise est indiquée pour CETTE opération, sinon null (n'invente JAMAIS un jour),"x":nom EXACT d'un autre compte de l'utilisateur si l'opération est un virement entre ses propres comptes (liste plus bas), sinon null}],"w":["avertissement court"]}
-"w" : 3 avertissements au maximum, une courte phrase chacun, uniquement pour un vrai problème de lecture (liste vide sinon). Ne commente pas les virements ni les soldes.
+"w" : 3 avertissements au maximum, une courte phrase chacun, uniquement pour un vrai problème de lecture (liste vide sinon). Ne commente JAMAIS les virements (ni vers le titulaire lui-même, ni vers un tiers) ni les soldes.
 
 RÈGLES IMPORTANTES :
 - N'invente aucune opération : seulement celles réellement présentes dans le texte.
@@ -634,10 +634,17 @@ async def preview_generic_import(
             chosen_id = _parse_optional_uuid(account_id)
             if chosen_id:
                 rows_kind = (
-                    get_supabase_client().table("accounts").select("kind")
+                    get_supabase_client().table("accounts").select("kind, name")
                     .eq("user_id", user_id).eq("id", str(chosen_id)).execute().data
                 )
-                chosen_kind = rows_kind[0]["kind"] if rows_kind else None
+                if rows_kind:
+                    # Un livret = type « épargne » ET un nom de livret (un compte
+                    # courant peut avoir été rangé en « épargne » par erreur).
+                    plain_name = _plain_label(rows_kind[0]["name"])
+                    is_livret = rows_kind[0]["kind"] == "savings" and bool(
+                        re.search(r"livret|epargne|ldds|\blep\b|\bpel\b|\bcel\b", plain_name)
+                    )
+                    chosen_kind = "savings" if is_livret else "bank"
             if chosen_kind == "savings":
                 if savings_part is None:
                     raise HTTPException(
