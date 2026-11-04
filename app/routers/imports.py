@@ -930,6 +930,27 @@ def _plain_label(text: str | None) -> str:
     return "".join(c for c in text if unicodedata.category(c) != "Mn").lower()
 
 
+_GENERIC_LABEL_WORDS = {
+    "vir", "virt", "vrt", "virement", "virements", "inst", "instantane", "instantanee", "pour", "de", "du", "des", "le", "la",
+    "a", "au", "vers", "recu", "emis", "sepa", "compte", "mr", "m", "mme", "mlle", "default", "reference", "ref", "debit",
+    "credit", "date", "valeur", "iban", "masque", "personnel", "propre", "perso", "et", "en", "sur",
+}
+
+
+def _label_words(text: str | None) -> set[str]:
+    return {w for w in re.findall(r"[a-z]{3,}", _plain_label(text)) if w not in _GENERIC_LABEL_WORDS}
+
+
+def _foreign_label(candidate_text: str | None, row_text: str) -> bool:
+    """Vrai si le libellé de l'opération existante parle de quelqu'un/quelque
+    chose d'autre que le libellé du relevé (ex : « argent de poche … JEAN-MARC »
+    face à « virement pour MATTEO CAMPANELLI ») : ce n'est pas la même opération.
+    Un libellé court (« Clé voiture », « Essence ») reste accepté."""
+    own = _label_words(row_text)
+    extra = _label_words(candidate_text) - own
+    return len(extra) > 2
+
+
 def _find_transfer_links(client, user_id: str, account_id: str | None, rows: list[dict]) -> dict[int, dict]:
     """Pour chaque ligne du relevé de `account_id` qui est en fait un virement
     déjà enregistré depuis l'autre compte, renvoie {position: opération
@@ -975,6 +996,7 @@ def _find_transfer_links(client, user_id: str, account_id: str | None, rows: lis
         matches[idx] = [
             e for e in candidates
             if (not wanted or e["account_id"] == wanted)
+            and (not e["needs_link"] or not _foreign_label(e.get("description"), f"{row.get('source_label') or ''} {row.get('description') or ''}"))
             and e["type"] != row["type"]
             and abs(float(e["amount"]) - float(row["amount"])) < 0.01
             and abs((date.fromisoformat(e["expense_date"]) - row["expense_date"]).days) <= 3
