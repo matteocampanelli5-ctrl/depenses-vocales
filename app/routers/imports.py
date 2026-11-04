@@ -998,6 +998,11 @@ def _find_transfer_links(client, user_id: str, account_id: str | None, rows: lis
     for idx, cands in matches.items():
         if idx in found:
             continue
+        # Une opération déjà reliée à CE compte est forcément la contrepartie
+        # (un autre virement de même montant d'un tiers ne doit pas gêner).
+        linked_here = [c for c in cands if not c["needs_link"]]
+        if linked_here:
+            cands = linked_here
         accounts = {c["account_id"] for c in cands}
         if len(accounts) != 1:
             continue  # contreparties sur des comptes différents : on ne devine pas
