@@ -991,6 +991,27 @@ def _find_transfer_links(client, user_id: str, account_id: str | None, rows: lis
             continue
         used.add(other["id"])
         found[idx] = other
+    # Plusieurs virements identiques (même montant, quelques jours d'écart, même
+    # compte d'en face) : impossible de dire lequel est lequel, mais ça n'a pas
+    # d'importance, ils sont interchangeables. On les apparie au plus proche.
+    pairs = []
+    for idx, cands in matches.items():
+        if idx in found:
+            continue
+        accounts = {c["account_id"] for c in cands}
+        if len(accounts) != 1:
+            continue  # contreparties sur des comptes différents : on ne devine pas
+        for c in cands:
+            if c["id"] in used:
+                continue
+            gap = abs((date.fromisoformat(c["expense_date"]) - rows[idx]["expense_date"]).days)
+            pairs.append((gap, idx, c["id"], c))
+    pairs.sort(key=lambda x: (x[0], x[1], x[2]))
+    for gap, idx, cid, c in pairs:
+        if idx in found or cid in used:
+            continue
+        used.add(cid)
+        found[idx] = c
     return found
 
 
