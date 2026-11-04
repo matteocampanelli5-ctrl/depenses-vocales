@@ -234,7 +234,7 @@ def _mask_sensitive_numbers(text: str) -> str:
     return _LONG_NUMBER_PATTERN.sub("[n° masqué]", text)
 
 
-_PDF_DATE_WORD = re.compile(r"^\d{2}/\d{2}/\d{4}$")
+_PDF_DATE_WORD = re.compile(r"^\d{2}/\d{2}(?:/\d{4})?$")  # jj/mm/aaaa ou jj/mm (La Banque Postale)
 _PDF_AMOUNT_WORD = re.compile(r"^\d{1,3}(?:[ \u00a0.]\d{3})*,\d{2}$|^\d+,\d{2}$")
 
 
@@ -293,6 +293,19 @@ def _annotate_pdf_columns(raw_bytes: bytes) -> str | None:
 
 
 
+_SAVINGS_SECTION = re.compile(r"Comptes\s+d.{1,12}pargne", re.IGNORECASE)
+
+
+def _split_statement_sections(annotated: str) -> tuple[str, str | None]:
+    """Certains relevés (La Banque Postale) regroupent le compte courant ET les
+    livrets du même titulaire. Renvoie (partie compte courant, partie épargne) ;
+    la seconde vaut None quand le relevé n'a qu'une section."""
+    match = _SAVINGS_SECTION.search(annotated)
+    if not match:
+        return annotated, None
+    return annotated[: match.start()], annotated[match.start():]
+
+
 def _fr_amount(text: str) -> float | None:
     """« 1.216,10 », « -678,30 », « 1 216,10 » -> float."""
     cleaned = text.replace("\u00a0", "").replace(" ", "")
@@ -312,14 +325,26 @@ def _read_statement_balances(annotated: str) -> dict | None:
     None si le relevé n'affiche pas ces deux soldes."""
     opening = re.search(r"SOLDE\s*AU\s*:\s*(\d{2}/\d{2}/\d{4})\s*(-?\s*[\d.]+,\d{2})", annotated, re.IGNORECASE)
     closing = re.search(r"Nouveau\s*solde\s*(?:en\s*EUR)?\s*:\s*(-?\s*[\d.]+,\d{2})", annotated, re.IGNORECASE)
+    closing_date = None
     if not opening or not closing:
-        return None
-    opening_amount, closing_amount = _fr_amount(opening.group(2)), _fr_amount(closing.group(1))
+        # Modèle La Banque Postale : « Ancien solde au jj/mm/aaaa 77,76 » …
+        # « Nouveau solde au jj/mm/aaaa 0,15 ».
+        opening = re.search(r"Ancien\s*solde\s*au\s*(\d{2}/\d{2}/\d{4})\s*(-?\s*[\d.\s]*\d,\d{2})", annotated, re.IGNORECASE)
+        closing = re.search(r"Nouveau\s*solde\s*au\s*(\d{2}/\d{2}/\d{4})\s*(-?\s*[\d.\s]*\d,\d{2})", annotated, re.IGNORECASE)
+        if not opening or not closing:
+            return None
+        closing_date = closing.group(1)
+        opening_amount, closing_amount = _fr_amount(opening.group(2)), _fr_amount(closing.group(2))
+    else:
+        opening_amount, closing_amount = _fr_amount(opening.group(2)), _fr_amount(closing.group(1))
     if opening_amount is None or closing_amount is None:
         return None
     period = re.search(r"du\s*(\d{2}/\d{2}/\d{4})\s*au\s*(\d{2}/\d{2}/\d{4})", annotated)
     period_end = None
-    if period:
+    if closing_date:
+        d, m, y = closing_date.split("/")
+        period_end = f"{y}-{m}-{d}"
+    elif period:
         d, m, y = period.group(2).split("/")
         period_end = f"{y}-{m}-{d}"
     debits = credits = 0.0
@@ -600,6 +625,28 @@ async def preview_generic_import(
         if not raw_bytes.startswith(b"%PDF"):
             raise HTTPException(status_code=400, detail="Ce fichier n'est pas un PDF valide")
         annotated = _annotate_pdf_columns(raw_bytes)
+        if annotated and ("Situation de vos comptes" in annotated or _SAVINGS_SECTION.search(annotated)):
+            # Relevé multi-comptes (compte courant + livrets, ex. La Banque
+            # Postale) : on ne garde que la partie du compte choisi, sinon les
+            # opérations du livret se mélangeraient à celles du compte courant.
+            current_part, savings_part = _split_statement_sections(annotated)
+            chosen_kind = None
+            chosen_id = _parse_optional_uuid(account_id)
+            if chosen_id:
+                rows_kind = (
+                    get_supabase_client().table("accounts").select("kind")
+                    .eq("user_id", user_id).eq("id", str(chosen_id)).execute().data
+                )
+                chosen_kind = rows_kind[0]["kind"] if rows_kind else None
+            if chosen_kind == "savings":
+                if savings_part is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Ce relevé ne contient aucune opération sur ce livret (seul son solde y apparaît) : rien à importer.",
+                    )
+                annotated = savings_part
+            else:
+                annotated = current_part
         statement_balances = _read_statement_balances(annotated) if annotated else None
         ai_content: str | list[dict] = _mask_sensitive_numbers(annotated) if annotated else [
             {

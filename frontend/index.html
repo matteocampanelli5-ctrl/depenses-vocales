@@ -342,6 +342,8 @@
     font-size: 0.95rem;
     font-weight: 600;
   }
+  .dashboard-month-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin: 0.25rem 0 0.5rem; }
+  .dashboard-month-bar h3 { margin: 0; font-size: 0.95rem; }
   .dashboard-row .dashboard-head {
     display: flex;
     align-items: center;
@@ -404,7 +406,7 @@
     white-space: nowrap;
   }
   .dashboard-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
-  .dashboard-row.dash-hidden { display: none; }
+  .dashboard-row.dash-hidden, .dashboard-month-bar.dash-hidden { display: none; }
 
   .yearly-summary {
     display: flex;
@@ -1390,11 +1392,13 @@
     <section id="view-dashboard" class="dashboard-section">
       <div class="dashboard-chip-row" id="dashboard-chip-row"></div>
 
+      <div class="dashboard-head dashboard-month-bar" id="dashboard-month-bar">
+        <h3>Mois affiché</h3>
+        <select id="dashboard-month-select" aria-label="Mois affiché"></select>
+      </div>
+
       <div class="dashboard-row" id="dash-row-expenses">
-        <div class="dashboard-head">
-          <h3>Répartition des dépenses par catégorie</h3>
-          <select id="dashboard-month-select"></select>
-        </div>
+        <h3>Répartition des dépenses par catégorie</h3>
         <div class="category-chart-row">
           <div class="chart-wrap">
             <canvas id="chart-categories"></canvas>
@@ -4856,6 +4860,8 @@
       document.querySelectorAll(".dashboard-chip").forEach((chip) => {
         chip.classList.toggle("active", chip.dataset.section === key);
       });
+      // Le choix du mois sert aux deux répartitions (dépenses et revenus).
+      document.getElementById("dashboard-month-bar").classList.toggle("dash-hidden", key !== "expenses" && key !== "income");
       // Un graphique Chart.js recréé pendant que son bloc était masqué
       // (display:none) se retrouve avec un canevas de taille nulle et ne se
       // corrige pas tout seul en redevenant visible — on force un resize
