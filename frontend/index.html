@@ -8845,7 +8845,9 @@
         g.forEach((r, i) => {
           const line = document.createElement("div");
           line.className = "account-card-status";
-          line.append(`« ${r.description || r.category} »  `);
+          const when = r.created_at ? new Date(r.created_at) : null;
+          const imported = when && !isNaN(when) ? ` · ajoutée le ${when.toLocaleDateString("fr-FR")} à ${when.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "";
+          line.append(`${i === 0 ? "①" : "②"} « ${r.description || r.category} » · ${r.type === "expense" ? "−" : "+"}${currencyFormatter.format(Number(r.amount))} · ${allCategoryLabels[r.category] || r.category}${imported}  `);
           if (i > 0) {
             const btn = document.createElement("button");
             btn.className = "secondary";
