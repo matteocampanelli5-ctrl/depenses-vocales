@@ -823,26 +823,33 @@ async def preview_generic_import(
 
     dates = [row["expense_date"] for row in parsed]
     min_date, max_date = min(dates), max(dates)
-    existing = (
+    existing_query = (
         client.table("transactions")
-        .select("expense_date, amount, type, description")
+        .select("expense_date, amount, type, account_id")
         .eq("user_id", user_id)
         .gte("expense_date", min_date.isoformat())
         .lte("expense_date", max_date.isoformat())
-        .execute()
-    ).data
-    existing_signatures = {
-        (
-            row["expense_date"],
-            round(float(row["amount"]), 2),
-            row["type"],
-            (row.get("description") or "").strip().lower(),
-        )
-        for row in existing
-    }
+    )
+    if statement_account:
+        existing_query = existing_query.eq("account_id", str(statement_account))
+    existing = existing_query.execute().data
+    # Doublon = même compte, même jour, même montant, même sens. Le libellé
+    # n'entre PAS dans la comparaison : l'IA reformule le libellé à chaque
+    # lecture (« Virement Melody » / « Virement WERO Melody »), donc comparer
+    # le texte laissait passer les doublons. On compte : s'il y a déjà 2
+    # opérations identiques en base, les 2 premières du relevé sont des
+    # doublons, la 3e est une vraie nouvelle opération.
+    remaining: dict[tuple, int] = {}
+    for row in existing:
+        key = (row["expense_date"], round(float(row["amount"]), 2), row["type"])
+        remaining[key] = remaining.get(key, 0) + 1
     for row in parsed:
-        sig = (row["expense_date"].isoformat(), row["amount"], row["type"], row["description"].strip().lower())
-        row["likely_duplicate"] = sig in existing_signatures
+        key = (row["expense_date"].isoformat(), row["amount"], row["type"])
+        if remaining.get(key, 0) > 0:
+            remaining[key] -= 1
+            row["likely_duplicate"] = True
+        else:
+            row["likely_duplicate"] = False
 
     warnings = [w for w in (ai_data.get("warnings") or []) if isinstance(w, str)]
     if skipped:
@@ -853,6 +860,11 @@ async def preview_generic_import(
         links = _find_transfer_links(client, user_id, str(statement_account) if statement_account else None, parsed)
     except Exception:  # noqa: BLE001 - simple information, ne doit jamais bloquer l'analyse
         links = {}
+    for idx, other in links.items():
+        # Affichage : la ligne apparaît déjà comme virement avec l'autre compte.
+        parsed[idx]["transfer_account_id"] = other["account_id"]
+        parsed[idx]["category"] = TRANSFER_CATEGORY
+        parsed[idx]["already_recorded"] = True
     if links:
         warnings.append(
             f"{len(links)} virement(s) déjà enregistré(s) depuis l'autre compte : ils seront reliés à l'import, sans doublon (garde-les cochés)."
@@ -935,13 +947,15 @@ def _find_transfer_links(client, user_id: str, account_id: str | None, rows: lis
             candidates.append({**e, "needs_link": False})  # déjà relié à ce compte
     matches: dict[int, list[dict]] = {}
     for idx, row in enumerate(rows):
-        if row.get("transfer_account_id") or row.get("loan_id"):
+        if row.get("loan_id"):
             continue
+        wanted = str(row["transfer_account_id"]) if row.get("transfer_account_id") else None
         if not _TRANSFER_WORDS.search(_plain_label(f"{row.get('source_label') or ''} {row.get('description') or ''}")):
             continue
         matches[idx] = [
             e for e in candidates
-            if e["type"] != row["type"]
+            if (not wanted or e["account_id"] == wanted)
+            and e["type"] != row["type"]
             and abs(float(e["amount"]) - float(row["amount"])) < 0.01
             and abs((date.fromisoformat(e["expense_date"]) - row["expense_date"]).days) <= 3
         ]

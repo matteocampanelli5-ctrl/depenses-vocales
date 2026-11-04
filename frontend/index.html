@@ -1378,6 +1378,11 @@
           <button class="secondary" id="month-delete-btn">Supprimer</button>
         </div>
       </details>
+      <details class="month-delete" id="dup-box">
+        <summary>🧹 Doublons probables <span id="dup-count"></span></summary>
+        <p class="recurring-hint">Opérations du même compte, du même jour, du même montant et du même sens, enregistrées plusieurs fois (par exemple après un double import). Tu choisis laquelle supprimer : par défaut la plus récente. Attention : deux vrais achats identiques le même jour apparaissent aussi ici, ne les supprime pas.</p>
+        <div id="dup-list"></div>
+      </details>
       <details class="month-delete" id="chain-box">
         <summary>🔗 Virements en chaîne <span id="chain-count"></span></summary>
         <p class="recurring-hint">Détecte quand tu fais passer de l'argent par un compte intermédiaire (ex. La Poste → BoursoBank → Bricks) et propose de les regrouper en un seul virement (La Poste → Bricks). Seuls les virements de même montant et aux dates identiques ou voisines (3 jours max) sont proposés.</p>
@@ -7615,7 +7620,7 @@
           const transferTag = document.createElement("span");
           transferTag.className = "import-row-transfer";
           const otherName = accountName(row.transfer_account_id) || "un de tes comptes";
-          transferTag.textContent = row.type === "expense" ? ` · virement vers ${otherName}` : ` · virement depuis ${otherName}`;
+          transferTag.textContent = (row.type === "expense" ? ` · virement vers ${otherName}` : ` · virement depuis ${otherName}`) + (row.already_recorded ? " · 🔗 déjà enregistré de l'autre côté (pas de doublon)" : "");
           desc.appendChild(transferTag);
         }
 
@@ -8809,6 +8814,62 @@
         box.appendChild(row);
       }
     }
+    // ---- Doublons probables -------------------------------------------------
+    function findDuplicateGroups() {
+      const groups = new Map();
+      for (const r of allRows) {
+        if (r.transfer_account_id || !r.account_id) continue;
+        const key = [r.account_id, r.expense_date, r.type, Number(r.amount).toFixed(2)].join("|");
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+      return [...groups.values()]
+        .filter((g) => g.length > 1)
+        .map((g) => g.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))))
+        .sort((a, b) => b[0].expense_date.localeCompare(a[0].expense_date));
+    }
+    function renderDuplicates() {
+      const box = document.getElementById("dup-list");
+      if (!box) return;
+      const groups = findDuplicateGroups();
+      document.getElementById("dup-count").textContent = groups.length ? `(${groups.length})` : "";
+      box.innerHTML = "";
+      if (!groups.length) { box.innerHTML = '<p class="recurring-hint">Aucun doublon probable.</p>'; return; }
+      for (const g of groups) {
+        const row = document.createElement("div");
+        row.className = "account-card";
+        const head = document.createElement("div");
+        head.className = "account-card-name";
+        head.textContent = `${g[0].expense_date} · ${currencyFormatter.format(Number(g[0].amount))} · ${accountName(g[0].account_id) || ""}`;
+        row.appendChild(head);
+        g.forEach((r, i) => {
+          const line = document.createElement("div");
+          line.className = "account-card-status";
+          line.append(`« ${r.description || r.category} »  `);
+          if (i > 0) {
+            const btn = document.createElement("button");
+            btn.className = "secondary";
+            btn.textContent = "Supprimer celle-ci";
+            btn.addEventListener("click", async () => {
+              if (!(await showConfirm(`Supprimer « ${r.description || r.category} » du ${r.expense_date} (${currencyFormatter.format(Number(r.amount))}) ?`))) return;
+              btn.disabled = true;
+              try {
+                await apiFetch(`/api/transactions/${r.id}`, { method: "DELETE" });
+                await loadTransactions(); await Promise.all([loadAccounts(), loadLoans()]);
+                showToast("Doublon supprimé");
+              } catch (err) { showToast("Erreur : " + err.message, true); }
+              renderDuplicates();
+            });
+            line.appendChild(btn);
+          } else {
+            line.append("(la plus ancienne, gardée)");
+          }
+          row.appendChild(line);
+        });
+        box.appendChild(row);
+      }
+    }
+    document.getElementById("dup-box").addEventListener("toggle", (e) => { if (e.target.open) renderDuplicates(); });
     document.getElementById("chain-box").addEventListener("toggle", (e) => { if (e.target.open) renderChains(); });
     document.getElementById("month-delete").addEventListener("toggle", (e) => { if (e.target.open) refreshMonthDeleteOptions(); });
     document.getElementById("month-delete-account").addEventListener("change", refreshMonthDeleteOptions);
