@@ -115,7 +115,21 @@ def sync_recurring_occurrences(client, user_id: str) -> None:
             year, month = _month_add(year, month, 1)
 
     if new_rows:
-        client.table("transactions").insert(new_rows).execute()
+        try:
+            client.table("transactions").insert(new_rows).execute()
+        except Exception as exc:  # noqa: BLE001
+            # Deux requêtes simultanées (l'appli en lance plusieurs au
+            # chargement) créent la même occurrence : la contrainte d'unicité
+            # refuse la 2e. Ce n'est pas une erreur — on réessaie ligne par
+            # ligne en ignorant les doublons, sans renvoyer de 500.
+            if "23505" not in str(exc) and "duplicate key" not in str(exc):
+                raise
+            for row in new_rows:
+                try:
+                    client.table("transactions").insert(row).execute()
+                except Exception as inner:  # noqa: BLE001
+                    if "23505" not in str(inner) and "duplicate key" not in str(inner):
+                        raise
 
 
 @router.get("/api/recurring")
