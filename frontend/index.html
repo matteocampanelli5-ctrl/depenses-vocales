@@ -1380,7 +1380,7 @@
       </details>
       <details class="month-delete" id="dup-box">
         <summary>🧹 Doublons probables <span id="dup-count"></span></summary>
-        <p class="recurring-hint">Opérations du même compte, du même jour, du même montant et du même sens, enregistrées plusieurs fois (par exemple après un double import). Tu choisis laquelle supprimer : par défaut la plus récente. Attention : deux vrais achats identiques le même jour apparaissent aussi ici, ne les supprime pas.</p>
+        <p class="recurring-hint">Opérations du même compte, du même jour, du même montant et du même sens, ajoutées lors de deux imports ou saisies différents (par exemple après un double import). Les opérations identiques ajoutées en même temps (péage aller-retour, deux achats pareils) ne sont pas listées. Tu vérifies avec ton relevé avant de supprimer.</p>
         <div id="dup-list"></div>
       </details>
       <details class="month-delete" id="chain-box">
@@ -8825,6 +8825,14 @@
       }
       return [...groups.values()]
         .filter((g) => g.length > 1)
+        // Un vrai doublon d'import a été ajouté lors d'un AUTRE import : les
+        // lignes ont des dates d'ajout différentes. Deux lignes ajoutées en
+        // même temps (même import) sont de vraies opérations répétées (ex :
+        // péage 1,70 € aller puis retour, deux achats identiques).
+        .filter((g) => {
+          const times = g.map((r) => Date.parse(r.created_at)).filter((x) => !isNaN(x));
+          return times.length > 1 && Math.max(...times) - Math.min(...times) > 60000;
+        })
         .map((g) => g.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || ""))))
         .sort((a, b) => b[0].expense_date.localeCompare(a[0].expense_date));
     }
