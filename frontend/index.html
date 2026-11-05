@@ -3538,11 +3538,22 @@
       // ex. 100 € d'argent de poche) — pas les cadeaux ponctuels ni les
       // remboursements, qui ne reviennent pas forcément.
       const incomeTx = real.filter((t) => t.type === "income");
-      const salary = incomeTx.filter((t) => t.category === "salaire").reduce((a, t) => a + Number(t.amount), 0) / active.length;
+      // Salaires et aides régulières (ex. essence payée par les parents) :
+      // moyenne mensuelle depuis le premier mois où ils apparaissent, pour
+      // qu'une aide récente ne soit pas diluée sur 6 mois.
+      const REGULAR_CATS = ["salaire", "aide_parents"];
+      let salary = 0;
+      for (const cat of REGULAR_CATS) {
+        const rows = incomeTx.filter((t) => t.category === cat);
+        if (!rows.length) continue;
+        const first = rows.reduce((m, t) => (monthKeyOf(t.expense_date) < m ? monthKeyOf(t.expense_date) : m), "9999-99");
+        const span = active.filter((k) => k >= first).length || 1;
+        salary += rows.reduce((a, t) => a + Number(t.amount), 0) / span;
+      }
       const regular = [];
       const byAmount = {};
       for (const t of incomeTx) {
-        if (t.category === "salaire" || t.category === "remboursement") continue;
+        if (["salaire", "aide_parents", "remboursement"].includes(t.category)) continue;
         const key = `${t.category}|${Number(t.amount).toFixed(2)}`;
         (byAmount[key] ||= new Set()).add(monthKeyOf(t.expense_date));
       }
@@ -3598,7 +3609,7 @@
       const left = (mode === "fit" ? sug.reference : sug.incomeMed) - shown.total;
       const regularTxt = sug.regular.map((r) => `${eur(r.amount)} (${allCategoryLabels[r.cat] || r.cat})`).join(" + ");
       const head = mode === "fit"
-        ? `Calé sur tes <b>revenus réguliers : ${escapeHtml(eur(sug.reference))}/mois</b> = salaires ${escapeHtml(eur(sug.salary))} en moyenne${regularTxt ? " + " + escapeHtml(regularTxt) : ""}. Cadeaux ponctuels et remboursements ne comptent pas.`
+        ? `Calé sur tes <b>revenus réguliers : ${escapeHtml(eur(sug.reference))}/mois</b> = salaires et aides ${escapeHtml(eur(sug.salary))} en moyenne${regularTxt ? " + " + escapeHtml(regularTxt) : ""}. Cadeaux ponctuels et remboursements ne comptent pas.`
         : `Sur ${sug.months.length} mois (${escapeHtml(monthLong(sug.months[0]))} → ${escapeHtml(monthLong(sug.months[sug.months.length - 1]))}) : tu reçois en général <b>${escapeHtml(eur(sug.incomeMed))}</b> (tout compris) et tu dépenses <b>${escapeHtml(eur(sug.expenseMed))}</b> par mois.`;
       const modeBar = `<div class="type-chips" style="margin-bottom:0.6rem"><button type="button" class="type-chip ${mode === "fit" ? "active" : ""}" data-sug-mode="fit">⚖️ À l'équilibre</button><button type="button" class="type-chip ${mode === "habits" ? "active" : ""}" data-sug-mode="habits">📊 D'après mes habitudes</button></div>`;
       sug.lines = shown.lines; sug.total = shown.total;
@@ -4263,7 +4274,7 @@
     }
     const CATEGORY_ICONS = {
       restaurant: "🍽️", courses: "🛒", transport: "🚗", logement: "🏠", loisirs: "🎮", "santé": "💊", sante: "💊",
-      credit: "🏦", avance: "🤝", autre: "📦", salaire: "💼", freelance: "💻", remboursement: "↩️", cadeau: "🎁",
+      credit: "🏦", avance: "🤝", aide_parents: "⛽", autre: "📦", salaire: "💼", freelance: "💻", remboursement: "↩️", cadeau: "🎁",
       abonnement: "📱", shopping: "🛍️", voyage: "✈️", essence: "⛽", carburant: "⛽", sport: "🏋️", education: "🎓",
       "éducation": "🎓", animaux: "🐾", impots: "🧾", "impôts": "🧾", assurance: "🛡️", epargne: "🐷", "épargne": "🐷",
     };
