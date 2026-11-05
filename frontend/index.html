@@ -318,6 +318,7 @@
     padding: 0.6rem 1rem calc(1rem + env(safe-area-inset-bottom)); transform: translateY(105%);
     transition: transform 0.2s ease; max-width: 640px; margin: 0 auto;
   }
+  .action-sheet:not(.open) { visibility: hidden; transition: transform 0.2s ease, visibility 0s 0.2s; }
   .action-sheet.open { transform: translateY(0); }
   .sheet-grip { width: 38px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 0.8rem; }
   .sheet-title { font-weight: 600; margin: 0 0 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -326,7 +327,8 @@
     display: flex; align-items: center; gap: 0.7rem; width: 100%; padding: 0.85rem 0.9rem; margin-bottom: 0.4rem;
     border-radius: 12px; border: none; background: var(--surface-2); color: var(--text); font-size: 0.98rem; cursor: pointer; text-align: left;
   }
-  .sheet-btn.danger { color: var(--danger); }
+  .sheet-btn.danger, button.sheet-btn.danger { color: var(--danger); background: var(--surface-2); border: none; }
+  #upcoming-recurring-list > * > :last-child { white-space: nowrap; }
   .sheet-btn.cancel { justify-content: center; background: transparent; color: var(--text-dim); }
 
   /* Pastilles Tous / Dépenses / Revenus / Virements */
@@ -1171,6 +1173,15 @@
   .rec-card.income { border-left-color: var(--success); }
   .rec-card.ended { border-left-color: var(--text-dim); opacity: 0.6; }
   .rec-main { flex: 1; min-width: 0; }
+  .rec-card .tx-ico { display: none; }
+  @media (max-width: 640px) {
+    #recurring-list:not(:empty) { background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius) + 2px); overflow: hidden; }
+    #recurring-list .rec-card { border: none; border-bottom: 1px solid var(--border); border-radius: 0; margin: 0; background: transparent; padding: 0.7rem 0.9rem; cursor: pointer; }
+    #recurring-list .rec-card:last-child { border-bottom: none; }
+    #recurring-list .rec-card .tx-ico { display: grid; }
+    #recurring-list .rec-card .tx-actions, #recurring-list .category-badge { display: none; }
+    #recurring-list .rec-top:not(:has(.start-badge, .end-badge, .to-note-badge)) { display: none; }
+  }
   .rec-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.15rem; flex-wrap: wrap; }
   .rec-name { font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rec-sub { font-size: 0.78rem; color: var(--text-dim); }
@@ -1615,7 +1626,7 @@
       <div class="dashboard-chip-row" id="dashboard-chip-row"></div>
 
       <div class="dashboard-head dashboard-month-bar" id="dashboard-month-bar">
-        <h3>Mois affiché</h3>
+        <h3>Mois</h3>
         <select id="dashboard-month-select" aria-label="Mois affiché"></select>
       </div>
 
@@ -1852,7 +1863,7 @@
     </section>
 
     <section id="view-savings" class="savings-section">
-      <div class="dashboard-row">
+      <div class="dashboard-row" id="sav-goal" data-collapsible="open">
         <h3>Objectif d'épargne mensuel</h3>
         <p class="recurring-hint">
           Le montant que tu veux garder de côté chaque mois (revenus moins
@@ -1873,7 +1884,7 @@
         </div>
       </div>
 
-      <div class="dashboard-row">
+      <div class="dashboard-row" id="sav-tips" data-collapsible="open">
         <h3>Conseils</h3>
         <p class="recurring-hint">
           Basés sur tes budgets par catégorie et tes tendances de dépenses
@@ -1885,7 +1896,7 @@
         </div>
       </div>
 
-      <div class="dashboard-row">
+      <div class="dashboard-row" id="sav-sim" data-collapsible="closed">
         <h3>Simulation de placement</h3>
         <p class="recurring-hint">
           Projection si tu places une somme sur un livret ou un placement à
@@ -1926,7 +1937,7 @@
         <div class="placement-result" id="placement-result"></div>
       </div>
 
-      <div class="dashboard-row">
+      <div class="dashboard-row" id="sav-plan" data-collapsible="closed">
         <h3>Plan d'épargne</h3>
         <p class="recurring-hint">
           Note chacune de tes dépenses de 1 (pas essentiel) à 5 (essentiel) —
@@ -2087,6 +2098,8 @@
       <button type="button" id="plus-logout"><span class="sheet-ico">⏻</span>Déconnexion</button>
     </div>
   </div>
+  <div class="sheet-backdrop" id="gen-sheet-backdrop"></div>
+  <div class="action-sheet" id="gen-sheet" role="dialog" aria-modal="true"></div>
   <div class="sheet-backdrop" id="tx-sheet-backdrop"></div>
   <div class="action-sheet" id="tx-sheet" role="dialog" aria-modal="true" aria-labelledby="tx-sheet-title">
     <div class="sheet-grip"></div>
@@ -3953,6 +3966,31 @@
       const key = String(cat || "").toLowerCase();
       return CATEGORY_ICONS[key] || "🏷️";
     }
+
+    // Feuille d'actions générique (téléphone) : titre, sous-titre, boutons.
+    function openActionSheet({ title, sub, actions }) {
+      const sheet = document.getElementById("gen-sheet");
+      const backdrop = document.getElementById("gen-sheet-backdrop");
+      sheet.innerHTML = '<div class="sheet-grip"></div>';
+      const t = document.createElement("p"); t.className = "sheet-title"; t.textContent = title || ""; sheet.appendChild(t);
+      if (sub) { const st = document.createElement("p"); st.className = "sheet-sub"; st.textContent = sub; sheet.appendChild(st); }
+      const close = () => { sheet.classList.remove("open"); backdrop.classList.remove("open"); };
+      for (const a of actions) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "sheet-btn" + (a.danger ? " danger" : "");
+        b.textContent = a.label;
+        b.addEventListener("click", () => { close(); a.onClick(); });
+        sheet.appendChild(b);
+      }
+      const cancel = document.createElement("button");
+      cancel.type = "button"; cancel.className = "sheet-btn cancel"; cancel.textContent = "Annuler";
+      cancel.addEventListener("click", close);
+      sheet.appendChild(cancel);
+      backdrop.onclick = close;
+      sheet.classList.add("open"); backdrop.classList.add("open");
+    }
+    const isPhone = () => window.matchMedia("(max-width: 640px)").matches;
 
     // Feuille d'actions d'une opération (téléphone) : remplace les trois
     // boutons affichés sur chaque ligne.
@@ -6315,6 +6353,22 @@
         actions.appendChild(editBtn);
         actions.appendChild(deleteBtn);
 
+        const ico = document.createElement("div");
+        ico.className = "tx-ico";
+        ico.textContent = categoryIcon(item.category);
+        sub.textContent += ` · ${allCategoryLabels[item.category] || item.category}`;
+        card.addEventListener("click", (e) => {
+          if (!isPhone() || e.target.closest(".tx-actions, .to-note-badge")) return;
+          openActionSheet({
+            title: item.name,
+            sub: `${type === "income" ? "+ " : "− "}${currencyFormatter.format(item.amount)} · le ${item.day_of_month} de chaque mois`,
+            actions: [
+              { label: "✏️ Modifier", onClick: () => openRecurringModal(item) },
+              { label: "🗑️ Supprimer", danger: true, onClick: () => deleteRecurring(item.id) },
+            ],
+          });
+        });
+        card.appendChild(ico);
         card.appendChild(main);
         card.appendChild(amountEl);
         card.appendChild(actions);
