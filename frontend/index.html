@@ -3531,7 +3531,54 @@
       lines.sort((a, b) => b.proposed - a.proposed);
       const incomes = active.map((k) => real.filter((t) => t.type === "income" && monthKeyOf(t.expense_date) === k).reduce((a, t) => a + Number(t.amount), 0));
       const expenses = active.map((k) => real.filter((t) => (t.type || "expense") === "expense" && monthKeyOf(t.expense_date) === k).reduce((a, t) => a + Number(t.amount), 0));
-      return { lines, months: active, incomeMed: median(incomes), expenseMed: median(expenses), total: lines.reduce((a, l) => a + l.proposed, 0) };
+      // Revenu de référence : les salaires (moyenne sur la période) + les
+      // rentrées régulières détectées (même montant presque tous les mois,
+      // ex. 100 € d'argent de poche) — pas les cadeaux ponctuels ni les
+      // remboursements, qui ne reviennent pas forcément.
+      const incomeTx = real.filter((t) => t.type === "income");
+      const salary = incomeTx.filter((t) => t.category === "salaire").reduce((a, t) => a + Number(t.amount), 0) / active.length;
+      const regular = [];
+      const byAmount = {};
+      for (const t of incomeTx) {
+        if (t.category === "salaire" || t.category === "remboursement") continue;
+        const key = `${t.category}|${Number(t.amount).toFixed(2)}`;
+        (byAmount[key] ||= new Set()).add(monthKeyOf(t.expense_date));
+      }
+      for (const [key, set] of Object.entries(byAmount)) {
+        if (set.size >= Math.max(3, active.length - 1)) {
+          const [cat, amt] = key.split("|");
+          regular.push({ cat, amount: Number(amt), months: set.size });
+        }
+      }
+      const reference = salary + regular.reduce((a, r) => a + r.amount, 0);
+      return { lines, months: active, incomeMed: median(incomes), expenseMed: median(expenses), total: lines.reduce((a, l) => a + l.proposed, 0), salary, regular, reference };
+    }
+
+    // Ajuste les propositions pour tenir dans le revenu de référence : les
+    // charges fixes ne bougent pas, les dépenses « plaisir » baissent d'abord
+    // (jusqu'à 20 % de leur niveau), puis les dépenses courantes (jusqu'à 40 %).
+    const FIXED_BUDGET_CATS = new Set(["abonnement", "credit", "logement", "assurance", "impots", "impôts"]);
+    function fitBudgetsToIncome(sug, target) {
+      const lines = sug.lines.map((l) => ({ ...l }));
+      const fixed = lines.filter((l) => FIXED_BUDGET_CATS.has(l.cat));
+      const plaisir = lines.filter((l) => !FIXED_BUDGET_CATS.has(l.cat) && l.plaisir);
+      const essentiel = lines.filter((l) => !FIXED_BUDGET_CATS.has(l.cat) && !l.plaisir);
+      const sum = (arr) => arr.reduce((a, l) => a + l.proposed, 0);
+      let room = target - sum(fixed);
+      const scale = (arr, budget, floor) => {
+        const tot = sum(arr);
+        if (tot <= budget) return 0;
+        const f = Math.max(floor, tot ? budget / tot : 1);
+        for (const l of arr) l.proposed = Math.max(5, Math.floor((l.proposed * f) / 5) * 5);
+        return sum(arr);
+      };
+      const pTot = sum(plaisir), eTot = sum(essentiel);
+      if (room < pTot + eTot) {
+        const pAfter = scale(plaisir, Math.max(0, room - eTot), 0.2) || sum(plaisir);
+        scale(essentiel, Math.max(0, room - pAfter), 0.4);
+      }
+      const total = sum(lines);
+      return { lines, total, gap: total - target };
     }
     function renderBudgetSuggestions() {
       const panel = document.getElementById("budget-suggest-panel");
@@ -3539,12 +3586,26 @@
       panel.classList.remove("hidden");
       if (!sug) { panel.innerHTML = '<p class="recurring-hint">Il faut au moins 2 mois complets d\'opérations pour proposer des budgets.</p>'; return; }
       const eur = (v) => currencyFormatter.format(v);
-      const left = sug.incomeMed - sug.total;
-      panel.innerHTML = `<div class="suggest-box"><p class="game-s" style="margin:0 0 0.6rem">Sur ${sug.months.length} mois (${escapeHtml(monthLong(sug.months[0]))} → ${escapeHtml(monthLong(sug.months[sug.months.length - 1]))}) : tu reçois en général <b>${escapeHtml(eur(sug.incomeMed))}</b> et tu dépenses <b>${escapeHtml(eur(sug.expenseMed))}</b> par mois (médianes).</p>` +
+      const mode = panel.dataset.mode || "fit";
+      let shown = sug;
+      let fitInfo = null;
+      if (mode === "fit") {
+        fitInfo = fitBudgetsToIncome(sug, sug.reference);
+        shown = { ...sug, lines: fitInfo.lines, total: fitInfo.total };
+      }
+      const left = (mode === "fit" ? sug.reference : sug.incomeMed) - shown.total;
+      const regularTxt = sug.regular.map((r) => `${eur(r.amount)} (${allCategoryLabels[r.cat] || r.cat})`).join(" + ");
+      const head = mode === "fit"
+        ? `Calé sur tes <b>revenus réguliers : ${escapeHtml(eur(sug.reference))}/mois</b> = salaires ${escapeHtml(eur(sug.salary))} en moyenne${regularTxt ? " + " + escapeHtml(regularTxt) : ""}. Cadeaux ponctuels et remboursements ne comptent pas.`
+        : `Sur ${sug.months.length} mois (${escapeHtml(monthLong(sug.months[0]))} → ${escapeHtml(monthLong(sug.months[sug.months.length - 1]))}) : tu reçois en général <b>${escapeHtml(eur(sug.incomeMed))}</b> (tout compris) et tu dépenses <b>${escapeHtml(eur(sug.expenseMed))}</b> par mois.`;
+      const modeBar = `<div class="type-chips" style="margin-bottom:0.6rem"><button type="button" class="type-chip ${mode === "fit" ? "active" : ""}" data-sug-mode="fit">⚖️ À l'équilibre</button><button type="button" class="type-chip ${mode === "habits" ? "active" : ""}" data-sug-mode="habits">📊 D'après mes habitudes</button></div>`;
+      sug.lines = shown.lines; sug.total = shown.total;
+      panel.innerHTML = `<div class="suggest-box">${modeBar}<p class="game-s" style="margin:0 0 0.6rem">${head}</p>` +
         `<div class="tx-group">${sug.lines.map((l, i) => `<label class="game-item suggest-line"><input type="checkbox" data-sug="${i}" checked><span class="tx-ico">${escapeHtml(categoryIcon(l.cat))}</span><span class="game-mid"><span class="game-t">${escapeHtml(allCategoryLabels[l.cat] || l.cat)}</span><span class="game-s">habituel ${escapeHtml(eur(l.med))} · récent ${escapeHtml(eur(l.avg3))}${l.plaisir ? " · −10 % (plaisir)" : ""}${l.current != null ? ` · actuel ${escapeHtml(eur(l.current))}` : ""}</span></span><input type="number" class="suggest-amount" data-sug-amount="${i}" value="${l.proposed}" min="1" step="5"></label>`).join("")}</div>` +
-        `<p class="game-s" style="margin:0.6rem 0">Total proposé : <b>${escapeHtml(eur(sug.total))}</b>/mois. ${left >= 0 ? `Il resterait environ <b class="positive">${escapeHtml(eur(left))}</b> pour l'épargne.` : `C'est <b class="negative">${escapeHtml(eur(-left))}</b> de plus que tes revenus habituels : le reste vient de ton épargne ou d'aides ponctuelles. Baisse les lignes « plaisir » pour te rapprocher de l'équilibre.`}</p>` +
+        `<p class="game-s" style="margin:0.6rem 0">Total proposé : <b>${escapeHtml(eur(sug.total))}</b>/mois. ${left >= 0 ? `Il resterait environ <b class="positive">${escapeHtml(eur(left))}</b> pour l'épargne.` : mode === "fit" ? `Même en réduisant les envies à 20 % et le courant (courses, transport…) à 40 % de leur niveau, il manque <b class="negative">${escapeHtml(eur(-left))}</b>/mois : l'équilibre total n'est pas atteignable sans changer une grosse dépense (transport, logement…). Ce manque viendrait de ton épargne.` : `C'est <b class="negative">${escapeHtml(eur(-left))}</b> de plus que tes revenus habituels : le reste vient de ton épargne ou d'aides ponctuelles.`}</p>` +
         `<div class="game-form-row"><button type="button" class="secondary" id="budget-suggest-cancel">Fermer</button><button type="button" class="primary" id="budget-suggest-apply">Appliquer la sélection</button></div></div>`;
       panel.querySelector("#budget-suggest-cancel").addEventListener("click", () => panel.classList.add("hidden"));
+      panel.querySelectorAll("[data-sug-mode]").forEach((b) => b.addEventListener("click", () => { panel.dataset.mode = b.dataset.sugMode; renderBudgetSuggestions(); }));
       panel.querySelector("#budget-suggest-apply").addEventListener("click", async (e) => {
         e.target.disabled = true;
         let n = 0, err = false;
