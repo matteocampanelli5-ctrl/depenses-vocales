@@ -5,11 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kaching</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#09090b">
 <script>
   try { var t = localStorage.getItem("kaching_theme"); if (t === "rose") document.documentElement.setAttribute("data-theme", "rose"); } catch (e) {}
   var IS_ROSE = document.documentElement.getAttribute("data-theme") === "rose";
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -20,17 +23,21 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #0f1115;
-    --surface: #1a1d24;
-    --surface-2: #22262f;
-    --border: #2a2e38;
-    --text: #e6e6e6;
-    --text-dim: #9aa0ac;
-    --accent: #3b82f6;
-    --accent-dim: #1d4ed8;
-    --danger: #ef4444;
-    --success: #22c55e;
-    --radius: 14px;
+    /* Palette « zinc » sombre de shadcn/ui. */
+    --bg: oklch(0.141 0.005 285.823);
+    --surface: oklch(0.21 0.006 285.885);
+    --surface-2: oklch(0.274 0.006 286.033);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --text: oklch(0.985 0 0);
+    --text-dim: oklch(0.705 0.015 286.067);
+    --accent: oklch(0.92 0.004 286.32);
+    --accent-fg: oklch(0.21 0.006 285.885);
+    --accent-dim: oklch(0.705 0.015 286.067);
+    --info: oklch(0.707 0.165 254.624);
+    --danger: oklch(0.704 0.191 22.216);
+    --success: oklch(0.765 0.177 163.223);
+    --radius: 12px;
   }
   :root[data-theme="rose"] {
     color-scheme: light;
@@ -41,6 +48,9 @@
     --text: #4d3641;
     --text-dim: #a08590;
     --accent: #e68aa6;
+    --accent-fg: #ffffff;
+    --info: #7b8fd6;
+    --input: #f4d3dc;
     --accent-dim: #cf6c8c;
     --danger: #e0566f;
     --success: #5fb48d;
@@ -52,14 +62,16 @@
   :root[data-theme="rose"] .icon-btn.danger:hover { background: #fbd9df; }
   .theme-choice { display: flex; gap: 0.5rem; margin: 0.5rem 0 1rem; }
   .theme-choice button { flex: 1; padding: 0.7rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 0.95rem; border-radius: 12px; }
-  .theme-choice button.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .theme-choice button.active { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     min-height: 100vh;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "tnum";
     padding-bottom: 6rem;
   }
   header {
@@ -91,7 +103,7 @@
     font-weight: 500;
     cursor: pointer;
   }
-  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
   /* Sur petit écran, la barre d'onglets devient un tiroir (menu "burger")
      plutôt que de s'écraser en plusieurs lignes : plus de place pour le
@@ -248,7 +260,7 @@
     font-size: 0.85rem;
     cursor: pointer;
   }
-  .btn-primary-sm { background: var(--accent); color: #fff; }
+  .btn-primary-sm { background: var(--accent); color: var(--accent-fg); }
   .btn-secondary-sm { background: var(--surface); color: var(--text-dim); border: 1px solid var(--border); }
 
   .filter-bar {
@@ -278,7 +290,7 @@
   .history-tool-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
   .tool-badge {
     position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px;
-    border-radius: 9px; background: var(--accent); color: #fff; font-size: 0.7rem; line-height: 18px; text-align: center;
+    border-radius: 9px; background: var(--accent); color: var(--accent-fg); font-size: 0.7rem; line-height: 18px; text-align: center;
   }
   .history-collapsible { display: none; }
   .history-collapsible.open { display: block; }
@@ -317,14 +329,81 @@
   .sheet-btn.danger { color: var(--danger); }
   .sheet-btn.cancel { justify-content: center; background: transparent; color: var(--text-dim); }
 
+  /* Pastilles Tous / Dépenses / Revenus / Virements */
+  .type-chips { display: flex; gap: 0.4rem; margin: 0 0 0.75rem; overflow-x: auto; scrollbar-width: none; }
+  .type-chip {
+    flex: none; font-size: 0.8rem; padding: 0.35rem 0.75rem; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-family: inherit;
+  }
+  .type-chip.active { background: var(--surface-2); border-color: transparent; color: var(--text); }
+
+  /* Liste : une carte par jour, opérations séparées par un filet. */
+  .tx-group { background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius) + 2px); overflow: hidden; }
+  .tx-group .tx-card { border: none; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; padding: 0.7rem 0.9rem; }
+  .tx-group .tx-card:last-child { border-bottom: none; }
+  .tx-ico {
+    width: 36px; height: 36px; border-radius: 10px; background: var(--surface-2); flex: none;
+    display: grid; place-items: center; font-size: 1.05rem;
+  }
+  .tx-ico.transfer { color: var(--info); }
+  .tx-ico svg, .bottom-nav svg, .sheet-ico svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tx-day { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 0.8rem; margin: 0.9rem 0.15rem 0.4rem; }
+  .tx-list { gap: 0; }
+  .view-title { display: none; }
+
+  /* Longues explications : 2 lignes + « Plus d'infos » sur téléphone. */
+  .hint-more { display: none; background: none; border: none; color: var(--text); font: inherit; font-size: 0.8rem; font-weight: 500; padding: 0; margin: -0.35rem 0 0.8rem; cursor: pointer; }
+  @media (max-width: 640px) {
+    .long-hint.clamped { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .hint-more { display: inline-block; }
+  }
+
+  /* Barre d'onglets du bas (téléphone) */
+  .bottom-nav { display: none; }
+  .sheet-btn.rich { align-items: center; }
+  .sheet-btn.rich > span:last-child { display: flex; flex-direction: column; }
+  .sheet-btn-t { font-weight: 500; }
+  .sheet-btn-s { font-size: 0.78rem; color: var(--text-dim); margin-top: 0.1rem; }
+  .sheet-ico { width: 36px; height: 36px; border-radius: 10px; background: var(--surface-2); display: inline-grid; place-items: center; flex: none; font-size: 1.05rem; }
+  .sheet-section { font-size: 0.78rem; color: var(--text-dim); margin: 0.9rem 0.2rem 0.5rem; }
+  .sheet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+  .sheet-grid button {
+    display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 0.6rem 0.2rem; border-radius: var(--radius);
+    border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 0.78rem; font-family: inherit; cursor: pointer;
+  }
+  .sheet-grid button.active { border-color: var(--accent); }
+
   /* Résumé (Solde, Dépenses…) seulement sur l'Accueil : ailleurs il prenait un
      tiers de l'écran du téléphone sans rapport avec l'onglet. */
   body:not([data-view="today"]) .summary,
   body:not([data-view="today"]) .week-summary { display: none; }
 
   @media (max-width: 640px) {
-    header { padding-top: 1rem; padding-bottom: 0.6rem; min-height: 58px; }
-    header .subtitle { display: none; }
+    header { padding: calc(0.9rem + env(safe-area-inset-top)) 1.25rem 0.7rem; min-height: 0; }
+    header .subtitle, header h1, .menu-toggle-btn, .tabs, .nav-drawer-backdrop, #logout-btn, .fab { display: none !important; }
+    .view-title { display: block; font-size: 1.6rem; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+    body { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+    /* Le micro reste caché sauf pendant une dictée (pour pouvoir l'arrêter). */
+    .fab-mic { display: none; bottom: calc(96px + env(safe-area-inset-bottom)); }
+    .fab-mic.listening, .fab-mic.processing { display: flex; }
+    .bottom-nav {
+      display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+      justify-content: space-around; align-items: flex-start;
+      padding: 0.45rem 0.5rem calc(0.45rem + env(safe-area-inset-bottom));
+      background: color-mix(in oklch, var(--bg) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      border-top: 1px solid var(--border);
+    }
+    .bn-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.2rem; background: none; border: none;
+      color: var(--text-dim); font-size: 0.66rem; font-family: inherit; padding: 0.25rem 0; cursor: pointer;
+    }
+    .bn-btn svg { width: 23px; height: 23px; stroke-width: 1.8; }
+    .bn-btn.active { color: var(--text); }
+    .bn-plus {
+      flex: none; width: 52px; height: 46px; border-radius: 15px; border: none; background: var(--accent); color: var(--accent-fg);
+      display: grid; place-items: center; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    }
+    .bn-plus svg { width: 24px; height: 24px; stroke-width: 2.4; }
     .tx-list { gap: 0; }
     .tx-card {
       border: none; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent;
@@ -335,8 +414,13 @@
     .tx-card .tx-top { display: none; }
     .tx-card .tx-description, .tx-card.transfer .tx-description { font-size: 0.95rem; white-space: nowrap; }
     .tx-amount { font-size: 0.98rem; }
-    .summary-card { padding: 0.7rem 0.8rem; min-width: 0; }
-    .summary-card .value { font-size: 1.05rem; }
+    .summary { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+    .summary-card { padding: 0.8rem 0.95rem; min-width: 0; }
+    .summary-card .value { font-size: 1.1rem; letter-spacing: -0.01em; }
+    .summary-card:first-child { grid-column: 1 / -1; padding: 1rem 1.1rem; }
+    .summary-card:first-child .value { font-size: 2rem; letter-spacing: -0.03em; }
+    .summary-card:last-child { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; }
+    .summary-card:last-child .label { margin: 0; }
   }
   @media (min-width: 641px) {
     .tx-meta { display: none; }
@@ -392,7 +476,7 @@
     justify-content: center;
     font-size: 0.95rem;
   }
-  .icon-btn:hover { background: #2d323d; color: var(--text); }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
   .icon-btn.danger:hover { background: #3a1d1d; color: var(--danger); }
 
   .empty-state {
@@ -442,7 +526,7 @@
     font-size: 0.8rem;
     cursor: pointer;
   }
-  .period-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .period-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
   .period-subtitle { font-size: 0.85rem; font-weight: 600; margin: 1rem 0 0.5rem; color: var(--text); }
   .dashboard-empty {
     color: var(--text-dim);
@@ -480,7 +564,7 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  .dashboard-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .dashboard-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
   .dashboard-row.dash-hidden, .dashboard-month-bar.dash-hidden { display: none; }
 
   .yearly-summary {
@@ -546,7 +630,7 @@
     font-weight: 500;
     cursor: pointer;
   }
-  .export-format-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .export-format-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 
   /* Import de relevé bancaire */
   .import-file-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.75rem; }
@@ -556,7 +640,7 @@
     border-radius: 10px;
     padding: 0.5rem 0.75rem 0.75rem;
   }
-  .import-dropzone.drag-over { border-color: var(--accent); background: rgba(59, 130, 246, 0.08); }
+  .import-dropzone.drag-over { border-color: var(--accent); background: oklch(1 0 0 / 5%); }
   .import-dropzone-hint { margin: 0.4rem 0 0; font-size: 0.75rem; color: var(--text-dim); text-align: center; }
   .import-account-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.6rem 0; flex-wrap: wrap; }
   .import-account-row label { font-size: 0.85rem; color: var(--text-dim); margin: 0; }
@@ -619,7 +703,7 @@
   .import-row-dup { color: var(--danger); }
   .import-row select { font-size: 0.8rem; max-width: 130px; }
   .import-row input[type="checkbox"] { width: auto; flex: none; margin: 0; }
-  .import-row-transfer { color: var(--accent); }
+  .import-row-transfer { color: var(--info); }
   .import-actions-row {
     display: flex;
     justify-content: space-between;
@@ -637,7 +721,7 @@
     padding: 0.6rem 0.75rem;
     margin-bottom: 0.5rem;
   }
-  .recurring-candidate.needs-confirmation { border-color: var(--accent); background: rgba(59, 130, 246, 0.07); }
+  .recurring-candidate.needs-confirmation { border-color: var(--accent); background: oklch(1 0 0 / 4%); }
   .recurring-candidate-header { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 0.88rem; font-weight: 500; }
   .recurring-candidate-tag { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); }
   .recurring-candidate-tag.credit { color: var(--danger); }
@@ -711,8 +795,8 @@
     text-overflow: ellipsis;
     max-width: 9rem;
   }
-  .tx-card.transfer { border-left: 3px solid var(--accent); }
-  .tx-amount.transfer { color: var(--accent); }
+  .tx-card.transfer { border-left: 3px solid var(--info); }
+  .tx-amount.transfer { color: var(--info); }
   .transfer-row { display: flex; gap: 0.6rem; }
   .transfer-row > div { flex: 1; min-width: 0; }
 
@@ -868,7 +952,7 @@
     font-size: 0.78rem;
     cursor: pointer;
   }
-  .savings-plan-rating-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .savings-plan-rating-btn.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
   .savings-plan-item-staleness {
     font-size: 0.72rem;
     color: var(--text-dim);
@@ -1085,11 +1169,11 @@
     border-radius: 50%;
     border: none;
     background: var(--accent);
-    color: white;
+    color: var(--accent-fg);
     font-size: 1.8rem;
     line-height: 1;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   }
   .fab:active { transform: scale(0.95); }
 
@@ -1168,7 +1252,7 @@
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    z-index: 10;
+    z-index: 50; /* au-dessus de la barre d'onglets du bas */
   }
   .modal-overlay.hidden { display: none; }
   #input-new-category-name.hidden { display: none; }
@@ -1210,7 +1294,7 @@
   }
   .type-btn.active[data-type="expense"] { background: rgba(239, 68, 68, 0.15); border-color: var(--danger); color: var(--danger); }
   .type-btn.active[data-type="income"] { background: rgba(34, 197, 94, 0.15); border-color: var(--success); color: var(--success); }
-  .type-btn.active[data-type="transfer"] { background: rgba(59, 130, 246, 0.15); border-color: var(--accent); color: var(--accent); }
+  .type-btn.active[data-type="transfer"] { background: color-mix(in oklch, var(--info) 15%, transparent); border-color: var(--info); color: var(--info); }
 
   .modal-actions { display: flex; gap: 0.6rem; margin-top: 0.5rem; }
   .confirm-modal { max-width: 400px; }
@@ -1225,7 +1309,7 @@
     font-weight: 500;
     cursor: pointer;
   }
-  button.primary { background: var(--accent); color: white; }
+  button.primary { background: var(--accent); color: var(--accent-fg); }
   button.primary:disabled { opacity: 0.6; }
   button.secondary { background: var(--surface-2); color: var(--text); }
   button.danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); border: 1px solid var(--danger); }
@@ -1392,6 +1476,7 @@
   <header>
     <button type="button" class="icon-btn danger" id="logout-btn" title="Se déconnecter" aria-label="Se déconnecter" style="position:absolute; top:1rem; right:1rem;">⏻</button>
     <h1>💰 Kaching</h1>
+    <p class="view-title" id="view-title">Aujourd'hui</p>
     <p class="subtitle">Ton suivi financier : dépenses, revenus, placements et prêts.</p>
   </header>
 
@@ -1441,6 +1526,12 @@
         <input type="search" id="filter-search" placeholder="Rechercher…">
         <button type="button" class="history-tool-btn" id="history-filters-btn" aria-expanded="false">Filtres<span class="tool-badge hidden" id="history-filters-badge"></span></button>
         <button type="button" class="history-tool-btn" id="history-tools-btn" aria-expanded="false" aria-label="Outils (doublons, virements en chaîne, supprimer un mois)">⋯<span class="tool-badge hidden" id="history-tools-badge"></span></button>
+      </div>
+      <div class="type-chips" id="history-type-chips" role="group" aria-label="Type d'opération">
+        <button type="button" class="type-chip active" data-type="">Tous</button>
+        <button type="button" class="type-chip" data-type="expense">Dépenses</button>
+        <button type="button" class="type-chip" data-type="income">Revenus</button>
+        <button type="button" class="type-chip" data-type="transfer">Virements</button>
       </div>
       <div class="filter-bar history-collapsible" id="history-filters">
         <select id="filter-category"><option value="">Toutes catégories</option></select>
@@ -1649,7 +1740,7 @@
       </div>
 
       <div class="dashboard-row">
-        <h3>Importer un relevé bancaire</h3>
+        <h3 id="import-section">Importer un relevé bancaire</h3>
         <p class="recurring-hint">
           N'importe quelle banque, en CSV, Excel (.xlsx, .xlsm) ou relevé PDF,
           y compris un fichier sans structure classique (ex : un tableau par
@@ -1929,6 +2020,29 @@
   <div class="voice-confirm-banner hidden" id="voice-confirm-banner"></div>
   <button class="fab-mic" id="fab-mic" aria-label="Dicter une dépense ou un revenu, ou poser une question" title="Dicte une dépense/un revenu, ou pose une question (ex : « combien j'ai dépensé en restaurant ce mois-ci ? »)">🎤</button>
   <button class="fab" id="fab-add" aria-label="Ajouter">+</button>
+  <nav class="bottom-nav" id="bottom-nav" aria-label="Navigation">
+    <button type="button" class="bn-btn" data-view="today"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Accueil</span></button>
+    <button type="button" class="bn-btn" data-view="history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>Historique</span></button>
+    <button type="button" class="bn-plus" id="bn-plus" aria-label="Ajouter, dicter, importer et autres onglets"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button type="button" class="bn-btn" data-view="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg><span>Stats</span></button>
+    <button type="button" class="bn-btn" data-view="wealth"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 3h10"/></svg><span>Comptes</span></button>
+  </nav>
+  <div class="sheet-backdrop" id="plus-sheet-backdrop"></div>
+  <div class="action-sheet" id="plus-sheet" role="dialog" aria-modal="true" aria-label="Ajouter et autres onglets">
+    <div class="sheet-grip"></div>
+    <button type="button" class="sheet-btn rich" id="plus-voice"><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><span><span class="sheet-btn-t">Dicter</span><span class="sheet-btn-s">« 12 € de resto hier » ou une question</span></span></button>
+    <button type="button" class="sheet-btn rich" id="plus-add"><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span><span class="sheet-btn-t">Ajouter à la main</span><span class="sheet-btn-s">Dépense, revenu ou virement</span></span></button>
+    <button type="button" class="sheet-btn rich" id="plus-import"><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg></span><span><span class="sheet-btn-t">Importer un relevé</span><span class="sheet-btn-s">PDF, CSV ou Excel</span></span></button>
+    <p class="sheet-section">Plus</p>
+    <div class="sheet-grid">
+      <button type="button" data-view="recurring"><span class="sheet-ico">🔁</span>Récurrentes</button>
+      <button type="button" data-view="savings"><span class="sheet-ico">🐷</span>Épargne</button>
+      <button type="button" data-view="loans"><span class="sheet-ico">🏦</span>Prêts</button>
+      <button type="button" data-view="export"><span class="sheet-ico">📤</span>Export</button>
+      <button type="button" data-view="help"><span class="sheet-ico">❓</span>Aide</button>
+      <button type="button" id="plus-logout"><span class="sheet-ico">⏻</span>Déconnexion</button>
+    </div>
+  </div>
   <div class="sheet-backdrop" id="tx-sheet-backdrop"></div>
   <div class="action-sheet" id="tx-sheet" role="dialog" aria-modal="true" aria-labelledby="tx-sheet-title">
     <div class="sheet-grip"></div>
@@ -3649,6 +3763,7 @@
         dayTotals[tx.expense_date] = (dayTotals[tx.expense_date] || 0) + (tx.type === "income" ? 1 : -1) * Number(tx.amount);
       }
       let lastDay = null;
+      let group = null;
       for (const tx of transactions) {
         const isTransfer = Boolean(tx.transfer_account_id);
         if (tx.expense_date !== lastDay) {
@@ -3663,6 +3778,9 @@
           if (t) total.textContent = (t > 0 ? "+ " : "− ") + currencyFormatter.format(Math.abs(t));
           head.append(label, total);
           listEl.appendChild(head);
+          group = document.createElement("div");
+          group.className = "tx-group";
+          listEl.appendChild(group);
         }
         const card = document.createElement("div");
         card.className = "tx-card " + (isTransfer ? "transfer" : tx.type);
@@ -3708,7 +3826,7 @@
         if (isTransfer) {
           const [fromId, toId] = transferDirection(tx);
           const route = `${accountName(fromId) || "?"} → ${accountName(toId) || "?"}`;
-          desc.textContent = tx.description ? `${route} · ${tx.description}` : route;
+          desc.textContent = route;
         } else {
           desc.textContent = tx.description || "—";
         }
@@ -3719,7 +3837,7 @@
         const meta = document.createElement("div");
         meta.className = "tx-meta";
         const metaParts = [];
-        if (isTransfer) metaParts.push("🔁 Virement");
+        if (isTransfer) metaParts.push(tx.description ? `Virement · ${tx.description}` : "Virement");
         else metaParts.push(allCategoryLabels[tx.category] || tx.category);
         if (loan) metaParts.push("🏦 " + loan.property_name);
         if (ownAccountName && !isTransfer) metaParts.push(ownAccountName);
@@ -3758,10 +3876,15 @@
         actions.appendChild(duplicateBtn);
         actions.appendChild(deleteBtn);
 
+        const ico = document.createElement("div");
+        ico.className = "tx-ico" + (isTransfer ? " transfer" : "");
+        if (isTransfer) ico.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h13l-3-3M17 17H4l3 3"/></svg>';
+        else ico.textContent = categoryIcon(tx.category);
+        card.appendChild(ico);
         card.appendChild(main);
         card.appendChild(amountEl);
         card.appendChild(actions);
-        listEl.appendChild(card);
+        group.appendChild(card);
       }
     }
 
@@ -3773,7 +3896,18 @@
       if (iso === yIso) return "Hier";
       const d = new Date(iso + "T00:00:00");
       const sameYear = iso.slice(0, 4) === today.slice(0, 4);
-      return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long", year: sameYear ? undefined : "numeric" });
+      const txt = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: sameYear ? undefined : "numeric" });
+      return txt.charAt(0).toUpperCase() + txt.slice(1);
+    }
+    const CATEGORY_ICONS = {
+      restaurant: "🍽️", courses: "🛒", transport: "🚗", logement: "🏠", loisirs: "🎮", "santé": "💊", sante: "💊",
+      credit: "🏦", autre: "📦", salaire: "💼", freelance: "💻", remboursement: "↩️", cadeau: "🎁",
+      abonnement: "📱", shopping: "🛍️", voyage: "✈️", essence: "⛽", carburant: "⛽", sport: "🏋️", education: "🎓",
+      "éducation": "🎓", animaux: "🐾", impots: "🧾", "impôts": "🧾", assurance: "🛡️", epargne: "🐷", "épargne": "🐷",
+    };
+    function categoryIcon(cat) {
+      const key = String(cat || "").toLowerCase();
+      return CATEGORY_ICONS[key] || "🏷️";
     }
 
     // Feuille d'actions d'une opération (téléphone) : remplace les trois
@@ -3851,8 +3985,12 @@
       const dateStart = document.getElementById("filter-date-start").value;
       const dateEnd = document.getElementById("filter-date-end").value;
       const account = document.getElementById("filter-account").value;
+      const typeChip = document.querySelector("#history-type-chips .type-chip.active");
+      const kind = typeChip ? typeChip.dataset.type : "";
 
       const filtered = allRows.filter((tx) => {
+        if (kind === "transfer" && !tx.transfer_account_id) return false;
+        if ((kind === "expense" || kind === "income") && (tx.transfer_account_id || tx.type !== kind)) return false;
         if (category && tx.category !== category) return false;
         if (account && tx.account_id !== account && tx.transfer_account_id !== account) return false;
         if (dateStart && tx.expense_date < dateStart) return false;
@@ -3868,6 +4006,12 @@
       const badge = document.getElementById("history-filters-badge");
       badge.textContent = active; badge.classList.toggle("hidden", !active);
     }
+    document.getElementById("history-type-chips").addEventListener("click", (e) => {
+      const chip = e.target.closest(".type-chip");
+      if (!chip) return;
+      document.querySelectorAll("#history-type-chips .type-chip").forEach((c) => c.classList.toggle("active", c === chip));
+      applyHistoryFilters();
+    });
     function toggleHistoryPanel(btnId, panelId) {
       const panel = document.getElementById(panelId);
       const open = !panel.classList.contains("open");
@@ -3921,6 +4065,11 @@
     function switchView(view) {
       currentView = view;
       document.body.dataset.view = view;
+      const VIEW_TITLES = { today: "Aujourd'hui", history: "Historique", dashboard: "Statistiques", recurring: "Récurrentes", export: "Import / export", savings: "Épargne", wealth: "Comptes", loans: "Prêts", help: "Aide" };
+      document.getElementById("view-title").textContent = VIEW_TITLES[view] || "Kaching";
+      document.querySelectorAll("#bottom-nav .bn-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+      document.querySelectorAll("#plus-sheet .sheet-grid [data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+      window.scrollTo(0, 0);
       document.getElementById("tab-today").classList.toggle("active", view === "today");
       document.getElementById("view-today").classList.toggle("visible", view === "today");
       document.getElementById("tab-history").classList.toggle("active", view === "history");
@@ -3965,6 +4114,28 @@
     function closeNavDrawer() {
       document.body.classList.remove("nav-drawer-open");
     }
+    // Barre du bas (téléphone) et feuille « + ».
+    document.querySelectorAll("#bottom-nav .bn-btn").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
+    function openPlusSheet() {
+      document.getElementById("plus-sheet").classList.add("open");
+      document.getElementById("plus-sheet-backdrop").classList.add("open");
+    }
+    function closePlusSheet() {
+      document.getElementById("plus-sheet").classList.remove("open");
+      document.getElementById("plus-sheet-backdrop").classList.remove("open");
+    }
+    document.getElementById("bn-plus").addEventListener("click", openPlusSheet);
+    document.getElementById("plus-sheet-backdrop").addEventListener("click", closePlusSheet);
+    document.getElementById("plus-voice").addEventListener("click", () => { closePlusSheet(); document.getElementById("fab-mic").click(); });
+    document.getElementById("plus-add").addEventListener("click", () => { closePlusSheet(); document.getElementById("fab-add").click(); });
+    document.getElementById("plus-import").addEventListener("click", () => {
+      closePlusSheet();
+      switchView("export");
+      setTimeout(() => document.getElementById("import-section").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    });
+    document.getElementById("plus-logout").addEventListener("click", () => { closePlusSheet(); document.getElementById("logout-btn").click(); });
+    document.querySelectorAll("#plus-sheet .sheet-grid [data-view]").forEach((b) => b.addEventListener("click", () => { closePlusSheet(); switchView(b.dataset.view); }));
+
     document.getElementById("menu-toggle-btn").addEventListener("click", () => {
       document.body.classList.toggle("nav-drawer-open");
     });
@@ -4240,7 +4411,7 @@
     const monthShortFormatter = new Intl.DateTimeFormat("fr-FR", { month: "short", year: "numeric" });
     const CHART_COLORS = IS_ROSE
       ? ["#e68aa6", "#f7c1b3", "#c9a7e8", "#f4b6d2", "#9fd8c8", "#f9d78f", "#b7c9f2", "#d9a0b3"]
-      : ["#3b82f6", "#22c55e", "#ef4444", "#f59e0b", "#a855f7", "#14b8a6", "#ec4899", "#64748b"];
+      : ["#4f7cf7", "#2fb58a", "#f0a33a", "#a565f2", "#e9566e", "#2bb3b8", "#e778b8", "#8b8b96"];
     const _cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     const CH_TEXT = _cssVar("--text");
     const CH_DIM = _cssVar("--text-dim");
@@ -9095,6 +9266,20 @@
         await loadRecurring();
         loadPreferencesUi();
         switchView("today");
+        // Explications longues repliées sur téléphone (bouton « Plus d'infos »).
+        document.querySelectorAll("p.recurring-hint").forEach((p) => {
+          if (p.textContent.trim().length < 170 || p.classList.contains("long-hint")) return;
+          p.classList.add("long-hint", "clamped");
+          const more = document.createElement("button");
+          more.type = "button";
+          more.className = "hint-more";
+          more.textContent = "ⓘ Plus d'infos";
+          more.addEventListener("click", () => {
+            const clamped = p.classList.toggle("clamped");
+            more.textContent = clamped ? "ⓘ Plus d'infos" : "Réduire";
+          });
+          p.after(more);
+        });
 
         // Raccourcis PWA (appui long sur l'icône de l'app une fois installée) :
         // /?shortcut=add ouvre directement le formulaire d'ajout, /?shortcut=voice
