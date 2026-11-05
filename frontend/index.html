@@ -58,6 +58,8 @@
   }
   :root[data-theme="rose"] body { font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif; }
   :root[data-theme="rose"] button, :root[data-theme="rose"] .tab-btn { border-radius: 999px; }
+  :root[data-theme="rose"] .sheet-grid button, :root[data-theme="rose"] .sheet-btn { border-radius: 16px; }
+  :root[data-theme="rose"] .acc-row-head, :root[data-theme="rose"] .bn-btn { border-radius: 0; }
   :root[data-theme="rose"] .icon-btn:hover { background: #f8dde4; }
   :root[data-theme="rose"] .icon-btn.danger:hover { background: #fbd9df; }
   .theme-choice { display: flex; gap: 0.5rem; margin: 0.5rem 0 1rem; }
@@ -374,6 +376,23 @@
     border: 1px solid var(--border); background: transparent; color: var(--text); font-size: 0.78rem; font-family: inherit; cursor: pointer;
   }
   .sheet-grid button.active { border-color: var(--accent); }
+
+  /* PC : les onglets deviennent une barre latérale à gauche. */
+  @media (min-width: 1024px) {
+    body { padding-left: 232px; }
+    header { position: fixed; top: 0; left: 0; width: 232px; margin: 0; padding: 1.4rem 1rem 0.5rem; z-index: 31; }
+    header .subtitle { display: none; }
+    header #logout-btn { top: 1.25rem !important; right: 0.9rem !important; }
+    .tabs {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 232px; margin: 0; padding: 4.6rem 0.75rem 1.5rem;
+      flex-direction: column; flex-wrap: nowrap; gap: 0.15rem; border-right: 1px solid var(--border); background: var(--bg); overflow-y: auto;
+    }
+    .tab-btn { flex: none; min-width: 0; text-align: left; border: none; background: transparent; padding: 0.6rem 0.75rem; font-size: 0.9rem; }
+    .tab-btn:hover { background: var(--surface); color: var(--text); }
+    .tab-btn.active { background: var(--surface-2); color: var(--text); }
+    .summary, main, .week-summary, .category-suggestion { margin-top: 1.5rem; }
+    .week-summary { margin-top: -0.4rem; }
+  }
 
   /* Résumé (Solde, Dépenses…) seulement sur l'Accueil : ailleurs il prenait un
      tiers de l'écran du téléphone sans rapport avec l'onglet. */
