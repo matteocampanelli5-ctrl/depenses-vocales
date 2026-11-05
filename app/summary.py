@@ -23,7 +23,7 @@ def build_summary(rows: list[dict]) -> dict:
     expenses = incomes = 0.0
     by_cat: dict[str, float] = {}
     for row in rows:
-        if row.get("category") == TRANSFER_CATEGORY or row.get("transfer_account_id"):
+        if row.get("category") in (TRANSFER_CATEGORY, "avance") or row.get("transfer_account_id"):
             continue
         amount = float(row.get("amount") or 0)
         if row.get("type") == "income":

@@ -2876,6 +2876,7 @@
         ["loisirs", "Loisirs"],
         ["santé", "Santé"],
         ["credit", "Crédit / prêt"],
+        ["avance", "Avance remboursée"],
         ["autre", "Autre"],
       ],
       income: [
@@ -2883,6 +2884,7 @@
         ["freelance", "Freelance"],
         ["remboursement", "Remboursement"],
         ["cadeau", "Cadeau"],
+        ["avance", "Avance remboursée"],
         ["autre", "Autre"],
       ],
     };
@@ -3644,6 +3646,7 @@
       wrap.innerHTML = "";
       for (const key of Object.keys(budgetInputsByCategory)) delete budgetInputsByCategory[key];
       for (const [value, label] of categoriesByType.expense) {
+        if (value === "avance") continue; // neutre : jamais de budget
         const budget = allBudgets.find((b) => b.category === value);
         const spent = totals[value] || 0;
 
@@ -4260,7 +4263,7 @@
     }
     const CATEGORY_ICONS = {
       restaurant: "🍽️", courses: "🛒", transport: "🚗", logement: "🏠", loisirs: "🎮", "santé": "💊", sante: "💊",
-      credit: "🏦", autre: "📦", salaire: "💼", freelance: "💻", remboursement: "↩️", cadeau: "🎁",
+      credit: "🏦", avance: "🤝", autre: "📦", salaire: "💼", freelance: "💻", remboursement: "↩️", cadeau: "🎁",
       abonnement: "📱", shopping: "🛍️", voyage: "✈️", essence: "⛽", carburant: "⛽", sport: "🏋️", education: "🎓",
       "éducation": "🎓", animaux: "🐾", impots: "🧾", "impôts": "🧾", assurance: "🛡️", epargne: "🐷", "épargne": "🐷",
     };
@@ -4434,7 +4437,9 @@
       try {
         const rows = await apiFetch("/api/transactions");
         allRows = rows;
-        allTransactions = rows.filter((tx) => !isTransferRow(tx));
+        // Les avances (courses pour les parents, remboursées ensuite) sont
+        // neutres comme les virements : hors totaux, budgets et statistiques.
+        allTransactions = rows.filter((tx) => !isTransferRow(tx) && tx.category !== "avance");
         const transactions = allTransactions;
         renderTransactions(transactions);
         updateWeekSummary(transactions);

@@ -379,6 +379,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour, SUR UNE 
 
 RÈGLES IMPORTANTES :
 - N'invente aucune opération : seulement celles réellement présentes dans le texte.
+- La catégorie "avance" est réservée aux achats faits pour quelqu'un qui les rembourse et à ces remboursements : ne la choisis que si le libellé le dit clairement (les règles apprises de l'utilisateur s'en chargent sinon).
 - CATÉGORIES : n'invente pas. Si tu ne reconnais pas clairement l'enseigne ou la nature de la dépense (sigle, nom propre inconnu, libellé bancaire opaque), mets "autre" — c'est préférable à une catégorie précise devinée. L'utilisateur corrige ensuite et l'appli retient ses choix. Ne choisis une catégorie que si le libellé est sans ambiguïté (ex : supermarché connu, SNCF, Netflix, restaurant explicite).
 - Si l'année n'est pas explicitement indiquée, utilise __DEFAULT_YEAR__ par défaut et signale-le dans "warnings".
 - Ignore les lignes de total, sous-total, solde, ou en-tête de colonnes.

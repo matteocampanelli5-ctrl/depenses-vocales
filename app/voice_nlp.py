@@ -228,6 +228,8 @@ def compute_voice_answer(metric: str, category: str | None, period: dict, client
         .execute()
         .data
     )
+    # Les avances remboursées (courses pour les parents…) non plus.
+    transactions = [tx for tx in transactions if tx.get("category") != "avance"]
 
     if metric == "spent":
         filtered = [

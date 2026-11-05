@@ -14,8 +14,12 @@ PARIS_TZ = ZoneInfo("Europe/Paris")
 
 TransactionType = Literal["expense", "income"]
 
-EXPENSE_CATEGORIES = {"restaurant", "courses", "transport", "logement", "loisirs", "santé", "credit", "autre"}
-INCOME_CATEGORIES = {"salaire", "freelance", "remboursement", "cadeau", "autre"}
+EXPENSE_CATEGORIES = {"restaurant", "courses", "transport", "logement", "loisirs", "santé", "credit", "avance", "autre"}
+INCOME_CATEGORIES = {"salaire", "freelance", "remboursement", "cadeau", "avance", "autre"}
+# « Avance » : achat fait pour quelqu'un qui rembourse (ex. courses pour les
+# parents) et le remboursement correspondant. Neutre : ni dépense, ni revenu
+# dans les totaux, budgets et statistiques (comme un virement).
+NEUTRAL_CATEGORY = "avance"
 
 # Libellés lisibles pour l'export Excel (les catégories sont stockées en base
 # sous forme de slugs courts — "restaurant", "salaire"... — mais on veut un
@@ -23,11 +27,11 @@ INCOME_CATEGORIES = {"salaire", "freelance", "remboursement", "cadeau", "autre"}
 EXPENSE_CATEGORY_LABELS = {
     "restaurant": "Restaurant", "courses": "Courses", "transport": "Transport",
     "logement": "Logement", "loisirs": "Loisirs", "santé": "Santé", "credit": "Crédit / prêt",
-    "autre": "Autre",
+    "avance": "Avance (remboursée)", "autre": "Autre",
 }
 INCOME_CATEGORY_LABELS = {
     "salaire": "Salaire", "freelance": "Freelance", "remboursement": "Remboursement",
-    "cadeau": "Cadeau", "autre": "Autre",
+    "cadeau": "Cadeau", "avance": "Remboursement d'une avance", "autre": "Autre",
 }
 
 
