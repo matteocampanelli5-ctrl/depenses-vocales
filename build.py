@@ -26,6 +26,7 @@ ICON_FILES = {
     "ICON_512_B64": ROOT / "frontend" / "icons" / "icon-512.png",
     "ICON_512_MASKABLE_B64": ROOT / "frontend" / "icons" / "icon-512-maskable.png",
     "CHART_JS_B64": ROOT / "frontend" / "vendor" / "chart.umd.min.js",
+    "GEIST_WOFF2_B64": ROOT / "frontend" / "vendor" / "geist.woff2",
 }
 
 MARKER_START = "# BEGIN_FRONTEND_B64"

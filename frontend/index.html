@@ -7,12 +7,10 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#09090b">
 <script>
-  try { var t = localStorage.getItem("kaching_theme"); if (t === "rose") document.documentElement.setAttribute("data-theme", "rose"); } catch (e) {}
+  try { var t = localStorage.getItem("kaching_theme"); if (["rose", "ocean", "forest", "gold"].indexOf(t) >= 0) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
   var IS_ROSE = document.documentElement.getAttribute("data-theme") === "rose";
 </script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="/geist.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -21,6 +19,7 @@
 <meta name="apple-mobile-web-app-title" content="Kaching">
 <script src="/chart.umd.min.js" onerror="console.error('Chart.js : échec de chargement.')"></script>
 <style>
+  @font-face { font-family: "Geist"; src: url("/geist.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
   :root {
     color-scheme: dark;
     /* Palette « zinc » sombre de shadcn/ui. */
@@ -39,6 +38,10 @@
     --success: oklch(0.765 0.177 163.223);
     --radius: 12px;
   }
+  /* Thèmes débloqués par les niveaux (variantes sombres). */
+  :root[data-theme="ocean"] { --bg: oklch(0.16 0.03 240); --surface: oklch(0.22 0.04 240); --surface-2: oklch(0.29 0.05 240); --accent: oklch(0.82 0.11 220); --accent-fg: oklch(0.2 0.04 240); --info: oklch(0.8 0.12 200); }
+  :root[data-theme="forest"] { --bg: oklch(0.16 0.025 155); --surface: oklch(0.22 0.035 155); --surface-2: oklch(0.29 0.045 155); --accent: oklch(0.85 0.13 145); --accent-fg: oklch(0.2 0.04 155); }
+  :root[data-theme="gold"] { --bg: oklch(0.15 0.012 80); --surface: oklch(0.21 0.02 80); --surface-2: oklch(0.28 0.03 80); --accent: oklch(0.84 0.14 85); --accent-fg: oklch(0.22 0.03 80); --border: oklch(0.84 0.14 85 / 18%); }
   :root[data-theme="rose"] {
     color-scheme: light;
     --bg: #fdf3f5;
@@ -807,7 +810,104 @@
   .today-alert.good { border-left-color: var(--success); }
   .today-row { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.35rem 0; border-bottom: 1px solid var(--border); font-size: 0.93rem; }
   .today-row:last-child { border-bottom: 0; }
-  .today-big { font-size: 1.9rem; font-weight: 700; margin: 0.1rem 0; }
+  .today-big { font-size: 2.3rem; font-weight: 650; letter-spacing: -0.03em; margin: 0.1rem 0; }
+  .today-big.negative, .negative { color: var(--danger); }
+  .rewards-section { display: none; }
+  .rewards-section.visible { display: block; }
+
+  /* ---- Accueil « gaming » ---- */
+  .today-hero { background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); padding: 1.1rem 1.15rem 1rem; }
+  .today-hero-label { margin: 0; font-size: 0.82rem; color: var(--text-dim); }
+  .today-hero-sub { margin: 0.15rem 0 0; font-size: 0.82rem; color: var(--text-dim); }
+  .today-hero-sub strong { color: var(--text); }
+  .today-hero-more { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.35rem; }
+  .today-hero-more summary { cursor: pointer; }
+  .star-track { position: relative; height: 8px; border-radius: 999px; background: var(--surface-2); margin-top: 0.9rem; overflow: hidden; }
+  .star-track i { position: absolute; inset: 0 auto 0 0; border-radius: 999px; background: linear-gradient(90deg, var(--success), oklch(0.84 0.15 110)); }
+  .star-labels { display: flex; justify-content: space-between; gap: 0.3rem; margin-top: 0.45rem; font-size: 0.7rem; color: var(--text-dim); }
+  .star-labels span.on { color: var(--text); }
+  .today-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 0.6rem 0; }
+  .today-stats .stat-card { padding: 0.7rem 0.8rem; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .today-stats .stat-card p { margin: 0; }
+  .today-stats .stat-card .label { font-size: 0.7rem; }
+  .today-stats .stat-card .value { font-size: 1rem; }
+  .game-level { width: 100%; display: flex; gap: 0.8rem; align-items: center; padding: 0.85rem 0.95rem; text-align: left; font: inherit; color: inherit; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); }
+  .game-medal { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 1.45rem; flex: none; }
+  .game-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .game-level-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+  .game-t { font-size: 0.9rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .game-s { font-size: 0.74rem; color: var(--text-dim); font-weight: 400; }
+  .game-bar { display: block; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin: 0.4rem 0 0.3rem; }
+  .game-bar i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+  .game-bar.gold i { background: linear-gradient(90deg, #c9ccd3, #f2c94c); }
+  .game-bar.good i { background: var(--success); }
+  .game-bar.warn i { background: oklch(0.8 0.15 75); }
+  .game-bar.bad i { background: var(--danger); }
+  .gold-t { color: #f2c94c; }
+  .game-xp { font-size: 0.82rem; font-weight: 600; color: #f2c94c; white-space: nowrap; }
+  .game-xp.ok { color: var(--success); }
+  .game-h { font-size: 0.92rem; margin: 1.1rem 0 0.5rem; display: flex; gap: 0.5rem; align-items: baseline; }
+  .game-h-row { display: flex; justify-content: space-between; align-items: baseline; }
+  .game-h-row .game-h { margin-bottom: 0.5rem; }
+  .game-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); }
+  .game-item:last-child { border-bottom: none; }
+  .game-item.locked { opacity: 0.55; }
+  .game-item .game-bar { margin-bottom: 0; }
+  .game-lvl { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; }
+  .game-badges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+  .game-badge { text-align: center; font-size: 0.68rem; color: var(--text-dim); line-height: 1.25; }
+  .game-badge .b { width: 54px; height: 54px; margin: 0 auto 0.3rem; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); display: grid; place-items: center; font-size: 1.45rem; }
+  .game-badge.lock .b { opacity: 0.3; filter: grayscale(1); }
+  .game-levels { display: flex; justify-content: space-between; margin: 0.8rem 0.2rem 0.2rem; }
+  .game-levels span { display: flex; flex-direction: column; align-items: center; font-size: 1.3rem; opacity: 0.35; filter: grayscale(1); }
+  .game-levels span.on { opacity: 1; filter: none; }
+  .game-levels small { font-size: 0.62rem; color: var(--text-dim); margin-top: 0.15rem; }
+  .game-preview { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-dim); margin: 0.8rem 0 0; }
+  .game-preview input { width: auto; }
+  .game-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
+  .game-chip { font-size: 0.78rem; padding: 0.3rem 0.65rem; border-radius: 999px; border: 1px solid var(--border); }
+  .game-chip.fire { color: oklch(0.8 0.17 60); border-color: color-mix(in oklch, oklch(0.8 0.17 60) 40%, transparent); }
+  .game-themes { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .game-themes button { padding: 0.45rem 0.8rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; font-size: 0.85rem; cursor: pointer; }
+  .game-themes button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .game-form { display: flex; flex-direction: column; gap: 0.5rem; }
+  .game-form-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+  .game-form-row > * { flex: 1; min-width: 0; }
+  .game-form label input { display: inline-block; width: auto; padding: 0.3rem 0.5rem; }
+  .whatif-out { font-size: 0.88rem; margin: 0.8rem 0 0.5rem; line-height: 1.45; }
+  .jars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; margin-bottom: 0.8rem; }
+  .jar { text-align: center; background: var(--surface-2); border-radius: var(--radius); padding: 0.8rem 0.6rem; }
+  .jar-glass { position: relative; width: 64px; height: 78px; margin: 0 auto 0.5rem; border: 2px solid var(--text-dim); border-top-width: 5px; border-radius: 10px 10px 16px 16px; overflow: hidden; }
+  .jar-fill { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, var(--success), oklch(0.84 0.15 110)); transition: height 0.8s ease; }
+  .jar-emoji { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.5rem; }
+  .jar-actions { display: flex; gap: 0.4rem; justify-content: center; margin-top: 0.5rem; }
+  .jar-actions button.secondary { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+  .emoji-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem; }
+  .emoji-grid label { display: flex; align-items: center; gap: 0.5rem; margin: 0; color: var(--text); font-size: 0.82rem; }
+  .emoji-grid input { width: 3rem; text-align: center; padding: 0.35rem; }
+  .levelup { text-align: center; }
+  .levelup-medal { font-size: 3.4rem; line-height: 1; margin-top: 0.3rem; }
+  .levelup-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; margin: 0.4rem 0 0.2rem; }
+  .levelup-list { background: var(--surface-2); border-radius: var(--radius); margin: 0.8rem 0 0; text-align: left; }
+  .levelup-btn { width: 100%; margin-top: 1rem; }
+  .gen-sheet-scroll, #gen-sheet { max-height: 88vh; overflow-y: auto; }
+  .recap-head { text-align: center; }
+  .recap-stars { font-size: 1.2rem; }
+  .recap-big { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin: 0.9rem 0; text-align: center; }
+  .recap-big b { display: block; font-size: 1.05rem; margin-top: 0.15rem; }
+  .recap-big .pos { color: var(--success); } .recap-big .neg { color: var(--danger); }
+  .recap .tx-group { text-align: left; }
+  .confetti-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 200; }
+  .title-badge { font-size: 1rem; margin-left: 0.4rem; vertical-align: middle; }
+  body.aura[data-view="today"]::before {
+    content: ""; position: fixed; inset: -20%; z-index: -1; pointer-events: none;
+    background: radial-gradient(40% 30% at 20% 10%, oklch(0.6 0.15 280 / 22%), transparent 70%), radial-gradient(35% 30% at 85% 30%, oklch(0.7 0.14 200 / 18%), transparent 70%);
+    animation: aura 18s ease-in-out infinite alternate;
+  }
+  @keyframes aura { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(-4%, 6%) rotate(8deg); } }
+  @media (prefers-reduced-motion: reduce) { body.aura[data-view="today"]::before { animation: none; } }
+  @media (max-width: 640px) { body[data-view="today"] .summary, body[data-view="today"] .week-summary { display: none; } }
   .progress-bar { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin: 0.3rem 0; }
   .progress-bar > span { display: block; height: 100%; background: var(--accent); }
   .progress-bar.warn > span { background: #f59e0b; }
@@ -1579,6 +1679,7 @@
     <button type="button" class="tab-btn" id="tab-savings" data-view="savings">Épargne</button>
     <button type="button" class="tab-btn" id="tab-wealth" data-view="wealth">💼 Patrimoine</button>
     <button type="button" class="tab-btn" id="tab-loans" data-view="loans">🏦 Prêts</button>
+    <button type="button" class="tab-btn" id="tab-rewards" data-view="rewards">🏆 Niveaux</button>
     <button type="button" class="tab-btn" id="tab-help" data-view="help">❓ Aide</button>
   </div>
 
@@ -2070,6 +2171,10 @@
       </div>
     </section>
 
+    <section id="view-rewards" class="rewards-section">
+      <div id="rewards-root"></div>
+    </section>
+
     <section id="view-help" class="help-section">
       <h3 style="margin:0 0 0.25rem;">🎨 Apparence</h3>
       <div class="theme-choice" id="theme-choice">
@@ -2129,6 +2234,7 @@
       <button type="button" data-view="savings"><span class="sheet-ico">🐷</span>Épargne</button>
       <button type="button" data-view="loans"><span class="sheet-ico">🏦</span>Prêts</button>
       <button type="button" data-view="export"><span class="sheet-ico">📤</span>Export</button>
+      <button type="button" data-view="rewards"><span class="sheet-ico">🏆</span>Niveaux</button>
       <button type="button" data-view="help"><span class="sheet-ico">❓</span>Aide</button>
       <button type="button" id="plus-logout"><span class="sheet-ico">⏻</span>Déconnexion</button>
     </div>
@@ -4024,6 +4130,10 @@
     };
     function categoryIcon(cat) {
       const key = String(cat || "").toLowerCase();
+      try {
+        const custom = JSON.parse(localStorage.getItem("kaching_cat_emoji") || "{}");
+        if (custom[key] && window.__kachingEmojiUnlocked) return custom[key];
+      } catch (e) {}
       return CATEGORY_ICONS[key] || "🏷️";
     }
 
@@ -4207,7 +4317,7 @@
     function switchView(view) {
       currentView = view;
       document.body.dataset.view = view;
-      const VIEW_TITLES = { today: "Aujourd'hui", history: "Historique", dashboard: "Statistiques", recurring: "Récurrentes", export: "Import / export", savings: "Épargne", wealth: "Comptes", loans: "Prêts", help: "Aide" };
+      const VIEW_TITLES = { rewards: "Niveaux", today: "Aujourd'hui", history: "Historique", dashboard: "Statistiques", recurring: "Récurrentes", export: "Import / export", savings: "Épargne", wealth: "Comptes", loans: "Prêts", help: "Aide" };
       document.getElementById("view-title").textContent = VIEW_TITLES[view] || "Kaching";
       document.querySelectorAll("#bottom-nav .bn-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
       document.querySelectorAll("#plus-sheet .sheet-grid [data-view]").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
@@ -4230,6 +4340,9 @@
       document.getElementById("view-loans").classList.toggle("visible", view === "loans");
       document.getElementById("view-wealth").classList.toggle("visible", view === "wealth");
       document.getElementById("view-help").classList.toggle("visible", view === "help");
+      document.getElementById("view-rewards").classList.toggle("visible", view === "rewards");
+      document.getElementById("tab-rewards").classList.toggle("active", view === "rewards");
+      if (view === "rewards") renderRewards();
       if (view === "today") renderToday();
       if (view === "dashboard") renderDashboard(allTransactions);
       if (view === "savings") renderSavings(allTransactions);
@@ -4248,6 +4361,7 @@
     document.getElementById("tab-loans").addEventListener("click", () => switchView("loans"));
     document.getElementById("tab-wealth").addEventListener("click", () => switchView("wealth"));
     document.getElementById("tab-help").addEventListener("click", () => switchView("help"));
+    document.getElementById("tab-rewards").addEventListener("click", () => switchView("rewards"));
 
     // Menu "burger" (mobile uniquement, voir le CSS @media associé) : la
     // barre d'onglets devient un tiroir plutôt que de s'écraser sur
@@ -9064,6 +9178,610 @@
       return found.sort((a, b) => b.amount - a.amount).slice(0, 5);
     }
 
+    // ===================================================================
+    // Niveaux, étoiles, badges, missions et récompenses (« gaming »).
+    // Tout est recalculé à partir des opérations : rien n'est stocké côté
+    // serveur, les XP ne font que monter (un mois raté rapporte 0, il n'en
+    // retire pas). Les réglages perso (missions, tirelires, emoji, thème)
+    // restent sur cet appareil (localStorage).
+    // ===================================================================
+    const GAME_LEVELS = [
+      { key: "debutant", name: "Débutant", min: 0, icon: "🌱", grad: "linear-gradient(135deg,#3f6b4b,#6fa57d)" },
+      { key: "bronze", name: "Bronze", min: 150, icon: "🥉", grad: "linear-gradient(135deg,#b07a4f,#7a4f2e)" },
+      { key: "argent", name: "Argent", min: 500, icon: "🥈", grad: "linear-gradient(135deg,#c9ccd3,#8d929c)" },
+      { key: "or", name: "Or", min: 1100, icon: "🥇", grad: "linear-gradient(135deg,#f2c94c,#c99a1c)" },
+      { key: "platine", name: "Platine", min: 2000, icon: "💠", grad: "linear-gradient(135deg,#9fe3e0,#5aa8c9)" },
+      { key: "diamant", name: "Diamant", min: 3500, icon: "💎", grad: "linear-gradient(135deg,#b9a7ff,#6f8cff)" },
+    ];
+    const GAME_REWARDS = [
+      { id: "themes", level: 1, icon: "🎨", name: "Thèmes Océan et Forêt", desc: "Deux nouvelles ambiances de couleurs." },
+      { id: "emoji", level: 1, icon: "😀", name: "Emoji perso", desc: "Choisis l'emoji de chaque catégorie." },
+      { id: "recap", level: 1, icon: "📊", name: "Récap du mois", desc: "Ton mois en une carte à partager." },
+      { id: "missions", level: 1, icon: "🎯", name: "Missions perso", desc: "Crée tes propres défis (ex. 3 KFET max par semaine)." },
+      { id: "joker", level: 2, icon: "🃏", name: "Joker de série", desc: "1 mois raté par trimestre ne casse pas ta série 🔥." },
+      { id: "jars", level: 2, icon: "🫙", name: "Tirelires", desc: "Des objectifs (voiture, voyage…) qui se remplissent." },
+      { id: "challenges", level: 2, icon: "🏁", name: "Défis spéciaux", desc: "Semaine sans dépense, week-end à 0 €, défi 52 semaines." },
+      { id: "coach", level: 3, icon: "🧠", name: "Coach IA", desc: "3 actions concrètes et chiffrées pour le mois prochain." },
+      { id: "whatif", level: 3, icon: "🔮", name: "Simulateur « Et si »", desc: "Et si je réduisais les restos de 30 €/mois ?" },
+      { id: "gold", level: 3, icon: "✨", name: "Thème Or et confettis", desc: "Touches dorées et confettis à chaque réussite." },
+      { id: "yearpdf", level: 3, icon: "📄", name: "Bilan annuel PDF", desc: "Ton année sur une page, à imprimer ou envoyer." },
+      { id: "projection", level: 4, icon: "📈", name: "Projection long terme", desc: "Ton patrimoine estimé année par année jusqu'en 2035." },
+      { id: "aura", level: 5, icon: "🌌", name: "Fond animé et badge rare", desc: "Une aura animée sur l'Accueil et un badge à côté du titre." },
+    ];
+    const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
+    const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+    let GAME_CACHE = null;
+
+    function gameRealTx() {
+      return allTransactions.filter((t) => t.category !== TRANSFER_CATEGORY && !t.transfer_account_id);
+    }
+    function monthAddKey(key, n) {
+      const [y, m] = key.split("-").map(Number);
+      const d = new Date(y, m - 1 + n, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    }
+    function monthLong(key) {
+      const [y, m] = key.split("-").map(Number);
+      return new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    }
+    // Étoiles d'un mois : 1 pas de découvert (revenus ≥ dépenses), 2 sous
+    // budget, 3 objectif d'épargne atteint.
+    function monthStars(key, txs) {
+      const inc = txs.filter((t) => t.type === "income").reduce((a, t) => a + Number(t.amount), 0);
+      const exp = txs.filter((t) => (t.type || "expense") === "expense").reduce((a, t) => a + Number(t.amount), 0);
+      const budgetTotal = allBudgets.reduce((a, b) => a + Number(b.amount || 0), 0);
+      const goal = savingsGoal && Number(savingsGoal.monthly_target) > 0 ? Number(savingsGoal.monthly_target) : 0;
+      const net = inc - exp;
+      const s1 = inc > 0 && net >= 0;
+      const s2 = budgetTotal > 0 ? exp <= budgetTotal : inc > 0 && exp <= inc * 0.9;
+      const s3 = goal > 0 ? net >= goal : inc > 0 && net >= inc * 0.2;
+      const catOk = allBudgets.filter((b) => {
+        const spent = txs.filter((t) => (t.type || "expense") === "expense" && t.category === b.category).reduce((a, t) => a + Number(t.amount), 0);
+        return spent <= Number(b.amount);
+      }).length;
+      return { key, inc, exp, net, s1, s2, s3, stars: (s1 ? 1 : 0) + (s2 ? 1 : 0) + (s3 ? 1 : 0), catOk, count: txs.length, budgetTotal, goal };
+    }
+    function levelIndexFor(xp) {
+      let i = 0;
+      GAME_LEVELS.forEach((l, idx) => { if (xp >= l.min) i = idx; });
+      return i;
+    }
+    function gameState() {
+      const txs = gameRealTx();
+      const byMonth = {};
+      for (const t of txs) (byMonth[monthKeyOf(t.expense_date)] ||= []).push(t);
+      const keys = Object.keys(byMonth).sort();
+      const current = monthKeyOf(todayIso());
+      const months = [];
+      let xp = 0, streak = 0, bestStreak = 0, jokersUsed = [];
+      if (keys.length) {
+        for (let k = keys[0]; k < current; k = monthAddKey(k, 1)) {
+          const m = monthStars(k, byMonth[k] || []);
+          if (!m.count) { months.push({ ...m, xp: 0, skipped: true }); continue; }
+          const quarter = `${k.slice(0, 4)}-T${Math.ceil(Number(k.slice(5)) / 3)}`;
+          if (m.stars >= 2) streak += 1;
+          else if (xp >= GAME_LEVELS[2].min && !jokersUsed.includes(quarter)) { jokersUsed.push(quarter); m.joker = true; }
+          else streak = 0;
+          bestStreak = Math.max(bestStreak, streak);
+          m.streakBonus = m.stars >= 2 ? Math.min(50, streak * 5) : 0;
+          m.xp = m.stars * 30 + m.catOk * 10 + (m.count >= 10 ? 10 : 0) + m.streakBonus;
+          xp += m.xp;
+          months.push(m);
+        }
+      }
+      const now = monthStars(current, byMonth[current] || []);
+      const lvl = levelIndexFor(xp);
+      const next = GAME_LEVELS[lvl + 1] || null;
+      const nowQuarter = `${current.slice(0, 4)}-T${Math.ceil(Number(current.slice(5)) / 3)}`;
+      const preview = lsGet("kaching_rewards_preview", false);
+      const state = { xp, lvl, level: GAME_LEVELS[lvl], next, months, now, streak, bestStreak, jokerAvailable: (lvl >= 2 || preview) && !jokersUsed.includes(nowQuarter), preview, txs };
+      state.badges = computeBadges(state);
+      GAME_CACHE = state;
+      window.__kachingEmojiUnlocked = rewardUnlocked("emoji");
+      return state;
+    }
+    function rewardUnlocked(id) {
+      const st = GAME_CACHE;
+      if (!st) return false;
+      const r = GAME_REWARDS.find((x) => x.id === id);
+      return Boolean(r) && (st.preview || st.lvl >= r.level);
+    }
+    function computeBadges(st) {
+      const done = (m) => !m.skipped;
+      const real = st.months.filter(done);
+      let run = 0, best3 = 0;
+      for (const m of real) { run = m.stars >= 2 ? run + 1 : 0; best3 = Math.max(best3, run); }
+      const savingsMax = allAccounts.filter((a) => a.kind === "savings").reduce((mx, a) => { const s = computeAccountState(a); return s.known ? Math.max(mx, s.balance) : mx; }, 0);
+      const days = new Set(st.txs.filter((t) => (t.type || "expense") === "expense").map((t) => t.expense_date));
+      const restoDays = new Set(st.txs.filter((t) => t.category === "restaurant").map((t) => t.expense_date));
+      let weekNoResto = false, weekendFree = false;
+      if (st.txs.length) {
+        const first = st.txs.reduce((a, t) => (t.expense_date < a ? t.expense_date : a), todayIso());
+        const d = new Date(first + "T00:00:00");
+        while (d.getDay() !== 1) d.setDate(d.getDate() + 1);
+        const end = new Date(todayIso() + "T00:00:00");
+        while (d < end) {
+          const isoOf = (x) => new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+          const wk = [];
+          for (let i = 0; i < 7; i++) { const x = new Date(d); x.setDate(d.getDate() + i); wk.push(isoOf(x)); }
+          if (wk[6] < todayIso()) {
+            if (wk.some((x) => days.has(x)) && !wk.some((x) => restoDays.has(x))) weekNoResto = true;
+            if (!days.has(wk[5]) && !days.has(wk[6]) && wk.slice(0, 5).some((x) => days.has(x))) weekendFree = true;
+          }
+          d.setDate(d.getDate() + 7);
+        }
+      }
+      return [
+        { icon: "🧾", name: "Premiers pas", desc: "Enregistrer une première opération", ok: st.txs.length > 0 },
+        { icon: "💯", name: "100 opérations", desc: "Suivre 100 opérations", ok: st.txs.length >= 100 },
+        { icon: "⭐", name: "Mois parfait", desc: "Un mois à 3 étoiles", ok: real.some((m) => m.stars === 3) },
+        { icon: "🎯", name: "3 mois sous budget", desc: "3 mois d'affilée à 2 étoiles ou plus", ok: best3 >= 3 },
+        { icon: "🔥", name: "6 mois de série", desc: "6 mois d'affilée à 2 étoiles ou plus", ok: best3 >= 6 },
+        { icon: "🛡️", name: "Jamais dans le rouge", desc: "Tous les mois suivis sans découvert (3 mois min.)", ok: real.length >= 3 && real.every((m) => m.s1) },
+        { icon: "🐷", name: "Livret 1 000 €", desc: "Un livret à 1 000 € ou plus", ok: savingsMax >= 1000 },
+        { icon: "🏦", name: "Livret 5 000 €", desc: "Un livret à 5 000 € ou plus", ok: savingsMax >= 5000 },
+        { icon: "🍽️", name: "Semaine sans resto", desc: "Une semaine entière sans dépense resto", ok: weekNoResto },
+        { icon: "🧘", name: "Week-end à 0 €", desc: "Un samedi et un dimanche sans dépense", ok: weekendFree },
+        { icon: "🗂️", name: "Multi-comptes", desc: "Suivre 3 comptes ou plus", ok: allAccounts.length >= 3 },
+        { icon: "📐", name: "Budgétiseur", desc: "Fixer au moins 3 budgets par catégorie", ok: allBudgets.length >= 3 },
+      ];
+    }
+    // Missions du mois en cours : budgets par catégorie, épargne, suivi,
+    // plus les missions perso (récompense Bronze).
+    function currentMissions(st) {
+      const key = monthKeyOf(todayIso());
+      const txs = st.txs.filter((t) => monthKeyOf(t.expense_date) === key);
+      const exp = (pred) => txs.filter((t) => (t.type || "expense") === "expense" && pred(t)).reduce((a, t) => a + Number(t.amount), 0);
+      const list = [];
+      for (const b of allBudgets) {
+        const spent = exp((t) => t.category === b.category);
+        list.push({ icon: categoryIcon(b.category), title: `${allCategoryLabels[b.category] || b.category} sous ${currencyFormatter.format(Number(b.amount))}`, sub: `${currencyFormatter.format(spent)} / ${currencyFormatter.format(Number(b.amount))}`, ratio: spent / Number(b.amount || 1), xp: 10, ok: spent <= Number(b.amount), inverse: true });
+      }
+      const goal = savingsGoal && Number(savingsGoal.monthly_target) > 0 ? Number(savingsGoal.monthly_target) : 0;
+      if (goal) list.push({ icon: "🐷", title: `Mettre ${currencyFormatter.format(goal)} de côté`, sub: `${currencyFormatter.format(Math.max(0, st.now.net))} / ${currencyFormatter.format(goal)}`, ratio: Math.max(0, st.now.net) / goal, xp: 30, ok: st.now.net >= goal });
+      const recent = st.txs.some((t) => t.expense_date >= isoDaysAgo(7));
+      list.push({ icon: "📥", title: "Tenir tes comptes à jour", sub: recent ? "Opérations de moins de 7 jours ✓" : "Importe ou saisis tes dernières opérations", ratio: recent ? 1 : 0, xp: 10, ok: recent });
+      if (rewardUnlocked("missions")) {
+        for (const m of lsGet("kaching_custom_missions", [])) {
+          const since = m.period === "week" ? startOfWeekIso() : `${key}-01`;
+          const items = st.txs.filter((t) => t.expense_date >= since && (t.type || "expense") === "expense" && (!m.category || t.category === m.category) && (!m.keyword || (t.description || "").toLowerCase().includes(m.keyword.toLowerCase())));
+          const value = m.unit === "count" ? items.length : items.reduce((a, t) => a + Number(t.amount), 0);
+          const fmt = (v) => (m.unit === "count" ? `${v}` : currencyFormatter.format(v));
+          list.push({ icon: "🎯", title: m.label, sub: `${fmt(value)} / ${fmt(Number(m.max))} ${m.period === "week" ? "cette semaine" : "ce mois"}`, ratio: value / Number(m.max || 1), xp: 0, ok: value <= Number(m.max), inverse: true, custom: true });
+        }
+      }
+      return list;
+    }
+    function isoDaysAgo(n) {
+      const d = new Date(); d.setDate(d.getDate() - n);
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    }
+    function missionHtml(m) {
+      const pct = Math.max(0, Math.min(100, m.ratio * 100));
+      const barCls = m.inverse ? (m.ratio > 1 ? "bad" : m.ratio > 0.8 ? "warn" : "") : (m.ok ? "good" : "");
+      const right = m.ok && !m.inverse ? `<span class="game-xp ok">✓ ${m.xp}</span>` : m.xp ? `<span class="game-xp">+${m.xp}</span>` : "";
+      return `<div class="game-item"><span class="tx-ico">${escapeHtml(m.icon)}</span><div class="game-mid"><div class="game-t">${escapeHtml(m.title)}</div><div class="game-s">${escapeHtml(m.sub)}</div>` +
+        `<div class="game-bar ${barCls}"><i style="width:${pct}%"></i></div></div>${right}</div>`;
+    }
+    function starTrackHtml(now) {
+      // Repères : ⭐1 à 0 %, ⭐2 au budget, ⭐3 à l'objectif — la jauge montre
+      // la part des revenus du mois déjà dépensée.
+      const inc = now.inc || 0;
+      const spentRatio = inc > 0 ? Math.min(1, now.exp / inc) : 0;
+      const marks = [
+        { on: now.s1, label: "Pas de découvert" },
+        { on: now.s2, label: "Sous budget" },
+        { on: now.s3, label: "Objectif épargne" },
+      ];
+      return `<div class="star-track"><i style="width:${Math.round((1 - spentRatio) * 100)}%"></i></div>` +
+        `<div class="star-labels">${marks.map((m) => `<span class="${m.on ? "on" : ""}">${m.on ? "⭐" : "☆"} ${escapeHtml(m.label)}</span>`).join("")}</div>`;
+    }
+    function levelCardHtml(st) {
+      const l = st.level, n = st.next;
+      const pct = n ? Math.round(((st.xp - l.min) / (n.min - l.min)) * 100) : 100;
+      const nowXp = st.now.stars * 30 + st.now.catOk * 10;
+      return `<button type="button" class="game-level" id="game-level-card"><span class="game-medal" style="background:${l.grad}">${l.icon}</span>` +
+        `<span class="game-mid"><span class="game-level-row"><b>Niveau ${escapeHtml(l.name)}</b><span class="game-s">${st.xp.toLocaleString("fr-FR")}${n ? " / " + n.min.toLocaleString("fr-FR") : ""} XP</span></span>` +
+        `<span class="game-bar gold"><i style="width:${pct}%"></i></span>` +
+        `<span class="game-s">${n ? `Encore ${(n.min - st.xp).toLocaleString("fr-FR")} XP pour <b class="gold-t">${escapeHtml(n.name)}</b>` : "Niveau maximum atteint 👑"} · ce mois : ~${nowXp} XP en jeu</span></span></button>`;
+    }
+    function badgesHtml(st, limit) {
+      const list = limit ? [...st.badges].sort((a, b) => Number(b.ok) - Number(a.ok)).slice(0, limit) : st.badges;
+      return `<div class="game-badges">${list.map((b) => `<div class="game-badge ${b.ok ? "" : "lock"}" title="${escapeHtml(b.desc)}"><div class="b">${b.icon}</div>${escapeHtml(b.name)}</div>`).join("")}</div>`;
+    }
+
+    // ---- Montée de niveau : écran de félicitations + confettis
+    function maybeShowLevelUp(st) {
+      const seen = lsGet("kaching_seen_level", null);
+      if (seen === st.lvl) return;
+      lsSet("kaching_seen_level", st.lvl);
+      if (seen === null || st.lvl < seen) {
+        if (seen === null && st.lvl > 0) showLevelSheet(st, true);
+        return;
+      }
+      showLevelSheet(st, false);
+    }
+    function showLevelSheet(st, first) {
+      const last = [...st.months].reverse().find((m) => !m.skipped);
+      const rows = [];
+      if (last) {
+        rows.push(["⭐", `${last.stars} étoile${last.stars > 1 ? "s" : ""} en ${monthLong(last.key)}`, last.stars * 30]);
+        if (last.catOk) rows.push(["🎯", `${last.catOk} budget${last.catOk > 1 ? "s" : ""} respecté${last.catOk > 1 ? "s" : ""}`, last.catOk * 10]);
+        if (last.streakBonus) rows.push(["🔥", `Série de ${st.streak} mois`, last.streakBonus]);
+      }
+      const unlocked = GAME_REWARDS.filter((r) => r.level === st.lvl);
+      const sheet = document.getElementById("gen-sheet");
+      const backdrop = document.getElementById("gen-sheet-backdrop");
+      sheet.innerHTML = `<div class="sheet-grip"></div><div class="levelup"><div class="levelup-medal">${st.level.icon}</div>` +
+        `<div class="levelup-title">${first ? `Tu démarres au niveau ${escapeHtml(st.level.name)} !` : `Niveau ${escapeHtml(st.level.name)} débloqué !`}</div>` +
+        `<div class="game-s">${st.xp.toLocaleString("fr-FR")} XP au total</div>` +
+        (rows.length ? `<div class="levelup-list">${rows.map(([i, t, x]) => `<div class="game-item"><span class="tx-ico">${i}</span><div class="game-mid"><div class="game-t">${escapeHtml(t)}</div></div><span class="game-xp">+${x}</span></div>`).join("")}</div>` : "") +
+        (unlocked.length ? `<p class="sheet-section" style="text-align:left">Débloqué</p><div class="levelup-list">${unlocked.map((r) => `<div class="game-item"><span class="tx-ico">${r.icon}</span><div class="game-mid"><div class="game-t">${escapeHtml(r.name)}</div><div class="game-s">${escapeHtml(r.desc)}</div></div></div>`).join("")}</div>` : "") +
+        `<button type="button" class="primary levelup-btn" id="levelup-ok">Continuer</button></div>`;
+      const close = () => { sheet.classList.remove("open"); backdrop.classList.remove("open"); };
+      sheet.querySelector("#levelup-ok").addEventListener("click", () => { close(); switchView("rewards"); });
+      backdrop.onclick = close;
+      sheet.classList.add("open"); backdrop.classList.add("open");
+      confetti();
+    }
+    function confetti() {
+      const canvas = document.createElement("canvas");
+      canvas.className = "confetti-canvas";
+      canvas.width = window.innerWidth * devicePixelRatio; canvas.height = window.innerHeight * devicePixelRatio;
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext("2d");
+      const colors = ["#f2c94c", "#4f7cf7", "#2fb58a", "#e9566e", "#a565f2", "#ffffff"];
+      const parts = Array.from({ length: 140 }, () => ({
+        x: canvas.width / 2 + (Math.random() - 0.5) * canvas.width * 0.3, y: canvas.height * 0.35,
+        vx: (Math.random() - 0.5) * 18 * devicePixelRatio, vy: (-Math.random() * 16 - 6) * devicePixelRatio,
+        s: (4 + Math.random() * 5) * devicePixelRatio, c: colors[Math.floor(Math.random() * colors.length)], r: Math.random() * 6,
+      }));
+      let frame = 0;
+      (function tick() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (const p of parts) {
+          p.vy += 0.45 * devicePixelRatio; p.x += p.vx; p.y += p.vy; p.vx *= 0.99; p.r += 0.1;
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.s / 2, -p.s / 3, p.s, p.s * 0.66); ctx.restore();
+        }
+        if (++frame < 150) requestAnimationFrame(tick); else canvas.remove();
+      })();
+    }
+    function celebrate() { if (rewardUnlocked("gold")) confetti(); }
+
+    // ---- Page « Niveaux » : progression, badges, récompenses et outils
+    function renderRewards() {
+      const root = document.getElementById("rewards-root");
+      if (!root) return;
+      const st = gameState();
+      const eur = (v) => currencyFormatter.format(v);
+      let html = levelCardHtml(st);
+      html += `<div class="game-levels">${GAME_LEVELS.map((l, i) => `<span class="${i <= st.lvl ? "on" : ""}" title="${l.min} XP">${l.icon}<small>${escapeHtml(l.name)}</small></span>`).join("")}</div>`;
+      html += `<label class="game-preview"><input type="checkbox" id="rewards-preview" ${st.preview ? "checked" : ""}> Mode aperçu : tout débloquer pour tester</label>`;
+      if (st.streak || st.jokerAvailable) {
+        html += `<div class="game-chips">${st.streak ? `<span class="game-chip fire">🔥 Série de ${st.streak} mois</span>` : ""}${rewardUnlocked("joker") ? `<span class="game-chip">${st.jokerAvailable ? "🃏 Joker dispo ce trimestre" : "🃏 Joker déjà utilisé ce trimestre"}</span>` : ""}</div>`;
+      }
+
+      // Historique des mois
+      const done = st.months.filter((m) => !m.skipped).slice(-6).reverse();
+      if (done.length) {
+        html += `<h3 class="game-h">Tes derniers mois</h3><div class="tx-group">` + done.map((m) =>
+          `<div class="game-item"><span class="tx-ico">${m.joker ? "🃏" : m.stars === 3 ? "🏆" : m.stars ? "⭐" : "·"}</span><div class="game-mid"><div class="game-t">${escapeHtml(monthLong(m.key))}</div>` +
+          `<div class="game-s">${"⭐".repeat(m.stars)}${"☆".repeat(3 - m.stars)} · dépensé ${escapeHtml(eur(m.exp))} · net ${escapeHtml(eur(m.net))}${m.joker ? " · joker utilisé" : ""}</div></div><span class="game-xp">+${m.xp}</span></div>`).join("") + `</div>`;
+      }
+      html += `<h3 class="game-h">Badges <span class="game-s">${st.badges.filter((b) => b.ok).length} / ${st.badges.length}</span></h3>` + badgesHtml(st);
+
+      // Récompenses
+      html += `<h3 class="game-h">Récompenses</h3><div class="tx-group">` + GAME_REWARDS.map((r) => {
+        const ok = rewardUnlocked(r.id);
+        const lvl = GAME_LEVELS[r.level];
+        return `<div class="game-item ${ok ? "" : "locked"}"><span class="tx-ico">${ok ? r.icon : "🔒"}</span><div class="game-mid"><div class="game-t">${escapeHtml(r.name)}</div><div class="game-s">${escapeHtml(r.desc)}</div></div><span class="game-lvl">${lvl.icon} ${escapeHtml(lvl.name)}</span></div>`;
+      }).join("") + `</div>`;
+
+      // Outils débloqués
+      const tools = [];
+      if (rewardUnlocked("themes") || rewardUnlocked("gold")) {
+        const themes = [["dark", "🌙 Sombre"], ["rose", "🌸 Rose"]];
+        if (rewardUnlocked("themes")) themes.push(["ocean", "🌊 Océan"], ["forest", "🌲 Forêt"]);
+        if (rewardUnlocked("gold")) themes.push(["gold", "✨ Or"]);
+        const cur = document.documentElement.getAttribute("data-theme") || "dark";
+        tools.push(`<div class="dashboard-row"><h3>🎨 Thème</h3><div class="game-themes">${themes.map(([v, l]) => `<button type="button" data-theme-pick="${v}" class="${cur === v ? "active" : ""}">${l}</button>`).join("")}</div></div>`);
+      }
+      if (rewardUnlocked("recap")) tools.push(`<div class="dashboard-row"><h3>📊 Récap du mois</h3><p class="recurring-hint">Ton mois dernier résumé en une carte (fais une capture pour la partager).</p><button type="button" class="secondary" id="game-recap-btn">Voir le récap de ${escapeHtml(monthLong(monthAddKey(monthKeyOf(todayIso()), -1)))}</button></div>`);
+      if (rewardUnlocked("missions")) tools.push(missionsEditorHtml());
+      if (rewardUnlocked("challenges")) tools.push(challengesHtml(st));
+      if (rewardUnlocked("jars")) tools.push(jarsHtml());
+      if (rewardUnlocked("coach")) tools.push(`<div class="dashboard-row"><h3>🧠 Coach IA</h3><p class="recurring-hint">L'IA lit le résumé chiffré de ton mois (totaux par catégorie, moyennes, abonnements — pas tes libellés) et te propose 3 actions.</p><div id="game-coach-out">${coachOutHtml(lsGet("kaching_coach_" + monthKeyOf(todayIso()), null))}</div><button type="button" class="secondary" id="game-coach-btn">Demander au coach</button></div>`);
+      if (rewardUnlocked("whatif")) tools.push(whatIfHtml());
+      if (rewardUnlocked("yearpdf")) tools.push(`<div class="dashboard-row"><h3>📄 Bilan annuel</h3><p class="recurring-hint">Ouvre une page récapitulative de l'année, prête à imprimer ou à enregistrer en PDF (bouton Partager › Imprimer sur iPhone).</p><button type="button" class="secondary" id="game-year-btn">Bilan ${new Date().getFullYear()}</button> <button type="button" class="secondary" id="game-year-prev-btn">Bilan ${new Date().getFullYear() - 1}</button></div>`);
+      if (rewardUnlocked("projection")) tools.push(`<div class="dashboard-row"><h3>📈 Projection long terme</h3><p class="recurring-hint">Estimation à ton rythme d'épargne moyen des 6 derniers mois, prêts déduits au fil des remboursements. Ce n'est pas une garantie.</p><div class="chart-wrap" style="height:220px"><canvas id="game-proj-chart"></canvas></div><div id="game-proj-note" class="game-s"></div></div>`);
+      if (rewardUnlocked("emoji")) tools.push(emojiEditorHtml());
+      if (rewardUnlocked("aura")) tools.push(`<div class="dashboard-row"><h3>🌌 Fond animé</h3><label class="game-preview" style="margin:0"><input type="checkbox" id="game-aura" ${lsGet("kaching_aura", true) ? "checked" : ""}> Aura animée sur l'Accueil</label></div>`);
+      if (tools.length) html += `<h3 class="game-h">Tes outils</h3>` + tools.join("");
+      root.innerHTML = html;
+      bindRewards(st);
+    }
+    function bindRewards(st) {
+      const root = document.getElementById("rewards-root");
+      root.querySelector("#rewards-preview").addEventListener("change", (e) => { lsSet("kaching_rewards_preview", e.target.checked); renderRewards(); applyAura(); });
+      root.querySelectorAll("[data-theme-pick]").forEach((b) => b.addEventListener("click", () => { try { localStorage.setItem("kaching_theme", b.dataset.themePick); } catch (e) {} location.reload(); }));
+      const recapBtn = root.querySelector("#game-recap-btn");
+      if (recapBtn) recapBtn.addEventListener("click", () => showRecap(monthAddKey(monthKeyOf(todayIso()), -1)));
+      const addMission = root.querySelector("#mission-add");
+      if (addMission) addMission.addEventListener("click", () => {
+        const label = root.querySelector("#mission-label").value.trim();
+        const max = Number(root.querySelector("#mission-max").value);
+        if (!label || !(max > 0)) { showToast("Donne un nom et un plafond à ta mission", true); return; }
+        const list = lsGet("kaching_custom_missions", []);
+        list.push({ label, max, unit: root.querySelector("#mission-unit").value, period: root.querySelector("#mission-period").value, category: root.querySelector("#mission-cat").value, keyword: root.querySelector("#mission-kw").value.trim() });
+        lsSet("kaching_custom_missions", list); showToast("Mission ajoutée"); celebrate(); renderRewards();
+      });
+      root.querySelectorAll("[data-mission-del]").forEach((b) => b.addEventListener("click", () => { const l = lsGet("kaching_custom_missions", []); l.splice(Number(b.dataset.missionDel), 1); lsSet("kaching_custom_missions", l); renderRewards(); }));
+      const addJar = root.querySelector("#jar-add");
+      if (addJar) addJar.addEventListener("click", () => {
+        const name = root.querySelector("#jar-name").value.trim();
+        const target = Number(root.querySelector("#jar-target").value);
+        if (!name || !(target > 0)) { showToast("Donne un nom et un montant à ta tirelire", true); return; }
+        const jars = lsGet("kaching_jars", []);
+        jars.push({ name, target, account: root.querySelector("#jar-account").value, saved: 0, emoji: root.querySelector("#jar-emoji").value || "🫙" });
+        lsSet("kaching_jars", jars); celebrate(); renderRewards();
+      });
+      root.querySelectorAll("[data-jar-add]").forEach((b) => b.addEventListener("click", () => {
+        const v = Number(prompt("Montant à ajouter dans la tirelire (€) :", "20"));
+        if (!(v > 0)) return;
+        const jars = lsGet("kaching_jars", []); jars[Number(b.dataset.jarAdd)].saved = Number(jars[Number(b.dataset.jarAdd)].saved || 0) + v; lsSet("kaching_jars", jars); celebrate(); renderRewards();
+      }));
+      root.querySelectorAll("[data-jar-del]").forEach((b) => b.addEventListener("click", () => { const j = lsGet("kaching_jars", []); j.splice(Number(b.dataset.jarDel), 1); lsSet("kaching_jars", j); renderRewards(); }));
+      const coachBtn = root.querySelector("#game-coach-btn");
+      if (coachBtn) coachBtn.addEventListener("click", async () => {
+        coachBtn.disabled = true; coachBtn.textContent = "Le coach réfléchit…";
+        try {
+          const res = await apiFetch("/api/coach", { method: "POST", body: JSON.stringify({ summary: coachSummary(st) }) });
+          lsSet("kaching_coach_" + monthKeyOf(todayIso()), res.tips);
+          root.querySelector("#game-coach-out").innerHTML = coachOutHtml(res.tips);
+        } catch (err) { showToast("Erreur : " + err.message, true); }
+        coachBtn.disabled = false; coachBtn.textContent = "Redemander au coach";
+      });
+      const wi = root.querySelector("#whatif-form");
+      if (wi) { wi.addEventListener("input", () => renderWhatIf()); renderWhatIf(); }
+      const yb = root.querySelector("#game-year-btn");
+      if (yb) { yb.addEventListener("click", () => openYearReport(new Date().getFullYear())); root.querySelector("#game-year-prev-btn").addEventListener("click", () => openYearReport(new Date().getFullYear() - 1)); }
+      if (root.querySelector("#game-proj-chart")) renderProjection();
+      root.querySelectorAll("[data-emoji-cat]").forEach((inp) => inp.addEventListener("change", () => {
+        const map = lsGet("kaching_cat_emoji", {});
+        const v = inp.value.trim();
+        if (v) map[inp.dataset.emojiCat] = v; else delete map[inp.dataset.emojiCat];
+        lsSet("kaching_cat_emoji", map); applyHistoryFilters(); showToast("Emoji enregistré");
+      }));
+      const aura = root.querySelector("#game-aura");
+      if (aura) aura.addEventListener("change", (e) => { lsSet("kaching_aura", e.target.checked); applyAura(); });
+      const lc = root.querySelector("#game-level-card");
+      if (lc) lc.addEventListener("click", () => showLevelSheet(st, false));
+    }
+    function catOptions(selected) {
+      return `<option value="">Toutes</option>` + categoriesByType.expense.filter(([v]) => v !== "autre").concat(Object.entries(allCategoryLabels).filter(([v]) => !categoriesByType.expense.some(([x]) => x === v) && !categoriesByType.income.some(([x]) => x === v) && v !== TRANSFER_CATEGORY))
+        .map(([v, l]) => `<option value="${escapeHtml(v)}" ${v === selected ? "selected" : ""}>${escapeHtml(l)}</option>`).join("");
+    }
+    function missionsEditorHtml() {
+      const list = lsGet("kaching_custom_missions", []);
+      return `<div class="dashboard-row"><h3>🎯 Missions perso</h3>` +
+        (list.length ? `<div class="tx-group" style="margin-bottom:0.7rem">${list.map((m, i) => `<div class="game-item"><span class="tx-ico">🎯</span><div class="game-mid"><div class="game-t">${escapeHtml(m.label)}</div><div class="game-s">max ${m.unit === "count" ? m.max + " fois" : escapeHtml(currencyFormatter.format(m.max))} par ${m.period === "week" ? "semaine" : "mois"}${m.category ? " · " + escapeHtml(allCategoryLabels[m.category] || m.category) : ""}${m.keyword ? " · « " + escapeHtml(m.keyword) + " »" : ""}</div></div><button type="button" class="icon-btn danger" data-mission-del="${i}" aria-label="Supprimer">🗑️</button></div>`).join("")}</div>` : "") +
+        `<div class="game-form"><input id="mission-label" placeholder="Ex : 3 KFET max par semaine"><select id="mission-cat">${catOptions("")}</select><input id="mission-kw" placeholder="Mot du libellé (optionnel, ex : KFET)">` +
+        `<div class="game-form-row"><input id="mission-max" type="number" min="1" step="1" placeholder="Plafond"><select id="mission-unit"><option value="count">fois</option><option value="eur">€</option></select><select id="mission-period"><option value="week">par semaine</option><option value="month">par mois</option></select></div>` +
+        `<button type="button" class="secondary" id="mission-add">Ajouter la mission</button></div><p class="recurring-hint" style="margin:0.5rem 0 0">Tes missions apparaissent sur l'Accueil avec leur progression.</p></div>`;
+    }
+    function challengesHtml(st) {
+      const today = todayIso();
+      const weekStart = startOfWeekIso();
+      const expDays = new Set(st.txs.filter((t) => (t.type || "expense") === "expense").map((t) => t.expense_date));
+      const daysSoFar = [];
+      for (let d = new Date(weekStart + "T00:00:00"); ; d.setDate(d.getDate() + 1)) {
+        const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+        if (iso > today) break;
+        daysSoFar.push(iso);
+      }
+      const free = daysSoFar.filter((x) => !expDays.has(x)).length;
+      // Week-end : samedi + dimanche de la semaine en cours
+      const sat = new Date(weekStart + "T00:00:00"); sat.setDate(sat.getDate() + 5);
+      const sun = new Date(sat); sun.setDate(sat.getDate() + 1);
+      const isoOf = (x) => new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      const we = [isoOf(sat), isoOf(sun)];
+      const weStatus = we[0] > today ? "à venir" : we.every((x) => x > today || !expDays.has(x)) ? (we[1] < today ? "réussi ✓" : "en cours, 0 € pour l'instant") : "raté cette fois";
+      // Défi 52 semaines : semaine n → n € ; cumul attendu vs virements vers l'épargne cette année.
+      const now = new Date();
+      const startYear = new Date(now.getFullYear(), 0, 1);
+      const week = Math.min(52, Math.floor((now - startYear) / (7 * 86400000)) + 1);
+      const expected = (week * (week + 1)) / 2;
+      const savingsIds = new Set(allAccounts.filter((a) => a.kind === "savings" || a.kind === "investment").map((a) => a.id));
+      const saved = allRows.filter((t) => t.transfer_account_id && t.expense_date >= `${now.getFullYear()}-01-01`).reduce((a, t) => {
+        const [from, to] = transferDirection(t);
+        if (savingsIds.has(to) && !savingsIds.has(from)) return a + Number(t.amount);
+        if (savingsIds.has(from) && !savingsIds.has(to)) return a - Number(t.amount);
+        return a;
+      }, 0);
+      const items = [
+        { icon: "🧘", title: "Semaine sans dépense", sub: `${free} jour${free > 1 ? "s" : ""} sans dépense sur ${daysSoFar.length} cette semaine`, ratio: daysSoFar.length ? free / 7 : 0, ok: free === 7 },
+        { icon: "🛋️", title: "Week-end à 0 €", sub: `Ce week-end : ${weStatus}`, ratio: weStatus.startsWith("réussi") ? 1 : 0, ok: weStatus.startsWith("réussi") },
+        { icon: "📆", title: "Défi 52 semaines", sub: `Semaine ${week} : ${currencyFormatter.format(Math.max(0, saved))} mis de côté cette année / ${currencyFormatter.format(expected)} visés`, ratio: expected ? Math.max(0, saved) / expected : 0, ok: saved >= expected },
+      ];
+      return `<div class="dashboard-row"><h3>🏁 Défis spéciaux</h3><div class="tx-group">${items.map((m) => missionHtml({ ...m, xp: 0 })).join("")}</div><p class="recurring-hint" style="margin:0.5rem 0 0">Défi 52 semaines : 1 € la 1re semaine, 2 € la 2e… soit 1 378 € sur l'année. Compté à partir de tes virements vers tes livrets et placements.</p></div>`;
+    }
+    function jarsHtml() {
+      const jars = lsGet("kaching_jars", []);
+      const accOpts = `<option value="">Montant ajouté à la main</option>` + allAccounts.filter((a) => a.kind === "savings" || a.kind === "investment").map((a) => `<option value="${escapeHtml(a.id)}">Suivre le solde de ${escapeHtml(a.name)}</option>`).join("");
+      const cards = jars.map((j, i) => {
+        let value = Number(j.saved || 0);
+        if (j.account) { const acc = allAccounts.find((a) => a.id === j.account); const stt = acc ? computeAccountState(acc) : null; value = stt && stt.known ? stt.balance : 0; }
+        const pct = Math.max(0, Math.min(100, (value / Number(j.target)) * 100));
+        return `<div class="jar"><div class="jar-glass"><div class="jar-fill" style="height:${pct}%"></div><span class="jar-emoji">${escapeHtml(j.emoji || "🫙")}</span></div>` +
+          `<div class="game-t">${escapeHtml(j.name)}</div><div class="game-s">${escapeHtml(currencyFormatter.format(value))} / ${escapeHtml(currencyFormatter.format(Number(j.target)))} · ${Math.round(pct)} %</div>` +
+          `<div class="jar-actions">${j.account ? "" : `<button type="button" class="secondary" data-jar-add="${i}">+ Ajouter</button>`}<button type="button" class="icon-btn danger" data-jar-del="${i}" aria-label="Supprimer">🗑️</button></div></div>`;
+      }).join("");
+      return `<div class="dashboard-row"><h3>🫙 Tirelires</h3>${jars.length ? `<div class="jars">${cards}</div>` : ""}` +
+        `<div class="game-form"><div class="game-form-row"><input id="jar-emoji" placeholder="🚗" maxlength="4" style="max-width:4.2rem;text-align:center"><input id="jar-name" placeholder="Ex : Voiture"></div><input id="jar-target" type="number" min="1" placeholder="Objectif (€)"><select id="jar-account">${accOpts}</select><button type="button" class="secondary" id="jar-add">Créer la tirelire</button></div></div>`;
+    }
+    function coachSummary(st) {
+      const key = monthKeyOf(todayIso());
+      const prevKeys = [1, 2, 3].map((n) => monthAddKey(key, -n));
+      const byCat = (keys) => {
+        const out = {};
+        for (const t of st.txs) if (keys.includes(monthKeyOf(t.expense_date)) && (t.type || "expense") === "expense") out[allCategoryLabels[t.category] || t.category] = (out[allCategoryLabels[t.category] || t.category] || 0) + Number(t.amount);
+        return out;
+      };
+      const cur = byCat([key]);
+      const avg = Object.fromEntries(Object.entries(byCat(prevKeys)).map(([k, v]) => [k, Math.round(v / 3)]));
+      const lines = [
+        `Mois en cours : ${key}, jour ${todayIso().slice(8)} sur ${daysInMonthOf(todayIso())}.`,
+        `Revenus ce mois : ${Math.round(st.now.inc)} €, dépenses : ${Math.round(st.now.exp)} €.`,
+        `Dépenses par catégorie ce mois : ${JSON.stringify(Object.fromEntries(Object.entries(cur).map(([k, v]) => [k, Math.round(v)])))}.`,
+        `Moyenne mensuelle des 3 mois précédents par catégorie : ${JSON.stringify(avg)}.`,
+        `Budgets fixés : ${JSON.stringify(Object.fromEntries(allBudgets.map((b) => [allCategoryLabels[b.category] || b.category, Number(b.amount)])))}.`,
+        `Objectif d'épargne mensuel : ${savingsGoal && savingsGoal.monthly_target ? savingsGoal.monthly_target + " €" : "aucun"}.`,
+        `Charges récurrentes : ${allRecurring.filter((r) => (r.type || "expense") === "expense").map((r) => `${r.name} ${r.amount} €`).join(", ") || "aucune"}.`,
+      ];
+      return lines.join("\n").slice(0, 5800);
+    }
+    function coachOutHtml(tips) {
+      if (!tips || !tips.length) return "";
+      return `<div class="tx-group" style="margin-bottom:0.7rem">${tips.map((t, i) => `<div class="game-item"><span class="tx-ico">${["1️⃣", "2️⃣", "3️⃣"][i] || "💡"}</span><div class="game-mid"><div class="game-t">${escapeHtml(t.title)}</div><div class="game-s" style="white-space:normal">${escapeHtml(t.detail)}</div></div>${t.saving ? `<span class="game-xp ok">−${Math.round(t.saving)} €</span>` : ""}</div>`).join("")}</div>`;
+    }
+    function whatIfHtml() {
+      return `<div class="dashboard-row"><h3>🔮 Simulateur « Et si »</h3><div class="game-form" id="whatif-form">` +
+        `<select id="whatif-cat">${catOptions("restaurant").replace('<option value="">Toutes</option>', '<option value="">Toutes mes dépenses</option>')}</select>` +
+        `<div class="game-form-row"><label class="game-s">Je réduis de <input id="whatif-cut" type="number" value="30" min="0" step="5" style="width:5.5rem"> €/mois</label><label class="game-s">pendant <input id="whatif-years" type="number" value="2" min="1" max="30" style="width:4rem"> ans</label></div>` +
+        `<label class="game-s">placés à <input id="whatif-rate" type="number" value="1.7" step="0.1" min="0" max="15" style="width:4.5rem"> %/an (Livret A ≈ 1,7 %)</label></div>` +
+        `<div id="whatif-out" class="whatif-out"></div><div class="chart-wrap" style="height:180px"><canvas id="whatif-chart"></canvas></div></div>`;
+    }
+    let whatIfChart = null;
+    function renderWhatIf() {
+      const cat = document.getElementById("whatif-cat").value;
+      const cut = Math.max(0, Number(document.getElementById("whatif-cut").value) || 0);
+      const years = Math.max(1, Math.min(30, Number(document.getElementById("whatif-years").value) || 1));
+      const rate = Math.max(0, Number(document.getElementById("whatif-rate").value) || 0) / 100;
+      const key = monthKeyOf(todayIso());
+      const prev = [1, 2, 3].map((n) => monthAddKey(key, -n));
+      const avg = gameRealTx().filter((t) => prev.includes(monthKeyOf(t.expense_date)) && (t.type || "expense") === "expense" && (!cat || t.category === cat)).reduce((a, t) => a + Number(t.amount), 0) / 3;
+      const pts = [0];
+      let v = 0;
+      for (let m = 1; m <= years * 12; m++) { v = v * (1 + rate / 12) + cut; if (m % 12 === 0) pts.push(Math.round(v)); }
+      document.getElementById("whatif-out").innerHTML = `Tu dépenses en moyenne <b>${escapeHtml(currencyFormatter.format(avg))}</b>/mois ${cat ? "en " + escapeHtml(allCategoryLabels[cat] || cat) : "au total"}. En réduisant de ${escapeHtml(currencyFormatter.format(cut))}, tu aurais <b class="gold-t">${escapeHtml(currencyFormatter.format(v))}</b> dans ${years} an${years > 1 ? "s" : ""} (dont ${escapeHtml(currencyFormatter.format(v - cut * years * 12))} d'intérêts).` + (avg && cut > avg ? `<br><span class="game-s">⚠️ C'est plus que ce que tu dépenses dans cette catégorie.</span>` : "");
+      const canvas = document.getElementById("whatif-chart");
+      if (whatIfChart) whatIfChart.destroy();
+      whatIfChart = safeCreateChart(canvas, { type: "bar", data: { labels: pts.map((_, i) => (i ? `An ${i}` : "Auj.")), datasets: [{ label: "Épargné", data: pts, backgroundColor: CHART_COLORS[0] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+    }
+    let projChart = null;
+    function renderProjection() {
+      let assets = 0;
+      for (const a of allAccounts) { if (a.active === false) continue; const s = computeAccountState(a); if (s.known) assets += s.balance; }
+      assets += projectsCapital();
+      const key = monthKeyOf(todayIso());
+      const prev = [1, 2, 3, 4, 5, 6].map((n) => monthAddKey(key, -n));
+      const tx6 = gameRealTx().filter((t) => prev.includes(monthKeyOf(t.expense_date)));
+      const monthlyNet = tx6.reduce((a, t) => a + (t.type === "income" ? 1 : -1) * Number(t.amount), 0) / 6;
+      const debt0 = loansRemainingTotal();
+      const endYear = Math.max(2035, new Date().getFullYear() + 5);
+      const labels = [], aSeries = [], nSeries = [];
+      const startYear = new Date().getFullYear();
+      // Dette : décroissance linéaire jusqu'à la fin des prêts (approximation).
+      const loanEnd = 2035;
+      for (let y = startYear; y <= endYear; y++) {
+        const yrs = y - startYear;
+        const a = assets + monthlyNet * 12 * yrs;
+        const debt = y >= loanEnd ? 0 : debt0 * Math.max(0, 1 - Math.max(0, y - 2030) / (loanEnd - 2030));
+        labels.push(String(y)); aSeries.push(Math.round(a)); nSeries.push(Math.round(a - debt));
+      }
+      if (projChart) projChart.destroy();
+      projChart = safeCreateChart(document.getElementById("game-proj-chart"), { type: "line", data: { labels, datasets: [
+        { label: "Comptes et placements", data: aSeries, borderColor: CHART_COLORS[0], tension: 0.2 },
+        { label: "Patrimoine net (prêts déduits)", data: nSeries, borderColor: CHART_COLORS[1], tension: 0.2 },
+      ] }, options: { responsive: true, maintainAspectRatio: false } });
+      document.getElementById("game-proj-note").textContent = `Base : ${currencyFormatter.format(assets)} aujourd'hui, ${currencyFormatter.format(monthlyNet)} d'épargne nette par mois en moyenne, ${currencyFormatter.format(debt0)} de prêts remboursés de 2030 à 2035.`;
+    }
+    function emojiEditorHtml() {
+      const map = lsGet("kaching_cat_emoji", {});
+      const cats = Object.entries(allCategoryLabels).filter(([v]) => v !== TRANSFER_CATEGORY);
+      return `<div class="dashboard-row" id="emoji-editor"><h3>😀 Emoji des catégories</h3><div class="emoji-grid">${cats.map(([v, l]) => `<label><input data-emoji-cat="${escapeHtml(v.toLowerCase())}" value="${escapeHtml(map[v.toLowerCase()] || "")}" placeholder="${escapeHtml(CATEGORY_ICONS[v.toLowerCase()] || "🏷️")}" maxlength="4"><span>${escapeHtml(l)}</span></label>`).join("")}</div></div>`;
+    }
+    // ---- Récap du mois (Bronze)
+    function showRecap(key) {
+      const txs = gameRealTx().filter((t) => monthKeyOf(t.expense_date) === key);
+      const exps = txs.filter((t) => (t.type || "expense") === "expense");
+      const m = monthStars(key, txs);
+      const top = [...exps].sort((a, b) => Number(b.amount) - Number(a.amount))[0];
+      const perDay = {};
+      for (const t of exps) perDay[t.expense_date] = (perDay[t.expense_date] || 0) + Number(t.amount);
+      const bigDay = Object.entries(perDay).sort((a, b) => b[1] - a[1])[0];
+      const cat = (list) => { const o = {}; for (const t of list) o[t.category] = (o[t.category] || 0) + Number(t.amount); return o; };
+      const cur = cat(exps);
+      const prevExp = gameRealTx().filter((t) => monthKeyOf(t.expense_date) === monthAddKey(key, -1) && (t.type || "expense") === "expense");
+      const prev = cat(prevExp);
+      let bestDrop = null;
+      for (const [c, v] of Object.entries(prev)) { const d = v - (cur[c] || 0); if (d > 0 && (!bestDrop || d > bestDrop[1])) bestDrop = [c, d]; }
+      const topCat = Object.entries(cur).sort((a, b) => b[1] - a[1])[0];
+      const freeDays = daysInMonthOf(`${key}-01`) - Object.keys(perDay).length;
+      const eur = (v) => currencyFormatter.format(v);
+      const row = (i, t, v) => `<div class="game-item"><span class="tx-ico">${i}</span><div class="game-mid"><div class="game-t">${escapeHtml(t)}</div></div><b>${escapeHtml(v)}</b></div>`;
+      const sheet = document.getElementById("gen-sheet");
+      const backdrop = document.getElementById("gen-sheet-backdrop");
+      sheet.innerHTML = `<div class="sheet-grip"></div><div class="recap"><div class="recap-head"><div class="game-s">Ton récap</div><div class="levelup-title" style="text-transform:capitalize">${escapeHtml(monthLong(key))}</div><div class="recap-stars">${"⭐".repeat(m.stars)}${"☆".repeat(3 - m.stars)}</div></div>` +
+        `<div class="recap-big"><div><span class="game-s">Dépensé</span><b>${escapeHtml(eur(m.exp))}</b></div><div><span class="game-s">Reçu</span><b class="pos">${escapeHtml(eur(m.inc))}</b></div><div><span class="game-s">Net</span><b class="${m.net >= 0 ? "pos" : "neg"}">${escapeHtml(eur(m.net))}</b></div></div>` +
+        `<div class="tx-group">` +
+        (topCat ? row(categoryIcon(topCat[0]), `Catégorie n°1 : ${allCategoryLabels[topCat[0]] || topCat[0]}`, eur(topCat[1])) : "") +
+        (top ? row("💸", `Plus grosse dépense : ${top.description || allCategoryLabels[top.category] || ""}`, eur(Number(top.amount))) : "") +
+        (bigDay ? row("📅", `Jour le plus dépensier : ${dateFormatter.format(new Date(bigDay[0] + "T00:00:00"))}`, eur(bigDay[1])) : "") +
+        (bestDrop ? row("📉", `Plus forte baisse : ${allCategoryLabels[bestDrop[0]] || bestDrop[0]}`, "−" + eur(bestDrop[1])) : "") +
+        row("🧘", "Jours sans dépense", String(Math.max(0, freeDays))) +
+        row("🧾", "Opérations", String(txs.length)) +
+        `</div><button type="button" class="primary levelup-btn" id="recap-ok">Fermer</button></div>`;
+      const close = () => { sheet.classList.remove("open"); backdrop.classList.remove("open"); };
+      sheet.querySelector("#recap-ok").addEventListener("click", close);
+      backdrop.onclick = close;
+      sheet.classList.add("open"); backdrop.classList.add("open");
+      if (m.stars === 3) celebrate();
+    }
+    // ---- Bilan annuel imprimable (Or)
+    function openYearReport(year) {
+      const txs = gameRealTx().filter((t) => t.expense_date.startsWith(String(year)));
+      const eur = (v) => currencyFormatter.format(v);
+      const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+      const rows = months.map((k) => { const m = monthStars(k, txs.filter((t) => monthKeyOf(t.expense_date) === k)); return m; }).filter((m) => m.count);
+      const cats = {};
+      for (const t of txs) if ((t.type || "expense") === "expense") cats[allCategoryLabels[t.category] || t.category] = (cats[allCategoryLabels[t.category] || t.category] || 0) + Number(t.amount);
+      const inc = rows.reduce((a, m) => a + m.inc, 0), exp = rows.reduce((a, m) => a + m.exp, 0);
+      let assets = 0; for (const a of allAccounts) { if (a.active === false) continue; const s = computeAccountState(a); if (s.known) assets += s.balance; }
+      const esc = escapeHtml;
+      const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bilan ${year} — Kaching</title>` +
+        `<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#18181b;margin:32px;max-width:760px}h1{margin:0}p.s{color:#71717a;margin:4px 0 24px}.k{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}.k div{border:1px solid #e4e4e7;border-radius:12px;padding:12px}.k b{display:block;font-size:20px;margin-top:4px}table{width:100%;border-collapse:collapse;margin-bottom:24px;font-size:14px}td,th{padding:6px 8px;border-bottom:1px solid #e4e4e7;text-align:left}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}h2{font-size:16px;margin:24px 0 8px}@media print{button{display:none}}</style></head><body>` +
+        `<button onclick="window.print()" style="float:right;padding:8px 14px;border-radius:8px;border:1px solid #d4d4d8;background:#fff">Imprimer / PDF</button>` +
+        `<h1>Bilan ${year}</h1><p class="s">Kaching · édité le ${esc(dateFormatter.format(new Date()))} · niveau ${esc(GAME_CACHE ? GAME_CACHE.level.name : "")}</p>` +
+        `<div class="k"><div>Revenus<b>${esc(eur(inc))}</b></div><div>Dépenses<b>${esc(eur(exp))}</b></div><div>Épargne nette<b>${esc(eur(inc - exp))}</b></div></div>` +
+        `<h2>Mois par mois</h2><table><tr><th>Mois</th><th class="n">Revenus</th><th class="n">Dépenses</th><th class="n">Net</th><th>Étoiles</th></tr>${rows.map((m) => `<tr><td style="text-transform:capitalize">${esc(monthLong(m.key))}</td><td class="n">${esc(eur(m.inc))}</td><td class="n">${esc(eur(m.exp))}</td><td class="n">${esc(eur(m.net))}</td><td>${"★".repeat(m.stars)}${"☆".repeat(3 - m.stars)}</td></tr>`).join("")}</table>` +
+        `<h2>Dépenses par catégorie</h2><table>${Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<tr><td>${esc(c)}</td><td class="n">${esc(eur(v))}</td><td class="n">${exp ? Math.round((v / exp) * 100) : 0} %</td></tr>`).join("")}</table>` +
+        `<h2>Situation actuelle</h2><table><tr><td>Comptes et placements (soldes connus)</td><td class="n">${esc(eur(assets + projectsCapital()))}</td></tr><tr><td>Prêts restant dus</td><td class="n">${esc(eur(loansRemainingTotal()))}</td></tr></table></body></html>`;
+      const w = window.open("", "_blank");
+      if (!w) { showToast("Autorise l'ouverture de fenêtres pour afficher le bilan", true); return; }
+      w.document.open(); w.document.write(html); w.document.close();
+    }
+    function applyAura() {
+      const on = rewardUnlocked("aura") && lsGet("kaching_aura", true);
+      document.body.classList.toggle("aura", on);
+      const badge = document.getElementById("view-title-badge");
+      if (badge) badge.remove();
+      if (on && GAME_CACHE) {
+        const b = document.createElement("span");
+        b.id = "view-title-badge"; b.className = "title-badge"; b.textContent = GAME_CACHE.level.icon;
+        document.getElementById("view-title").appendChild(b);
+      }
+    }
+
+    // Bloc « gaming » de l'Accueil (au-dessus du reste).
+    function todayGameHtml(st) {
+      let html = levelCardHtml(st);
+      const missions = currentMissions(st);
+      html += `<div class="game-h-row"><h3 class="game-h">Missions du mois</h3><button type="button" class="link-btn" data-goto="rewards">Niveaux ›</button></div><div class="tx-group">${missions.map(missionHtml).join("")}</div>`;
+      html += `<div class="game-h-row"><h3 class="game-h">Badges <span class="game-s">${st.badges.filter((b) => b.ok).length} / ${st.badges.length}</span></h3><button type="button" class="link-btn" data-goto="rewards">Tout voir ›</button></div>` + badgesHtml(st, 4);
+      return html;
+    }
+
     function renderToday() {
       const root = document.getElementById("today-root");
       if (!root) return;
@@ -9101,20 +9819,24 @@
       const resteAVivre = bank + upInc - upExp;
       const forecast = resteAVivre - avgDaily * remainingDays;
 
-      let html = "";
+      const game = gameState();
+      const monthName = new Date().toLocaleDateString("fr-FR", { month: "long" });
+      let html = `<div class="today-hero">`;
       if (bankKnown) {
-        html += `<div class="dashboard-row"><p class="label" style="margin:0;color:var(--text-dim)">Reste à vivre jusqu'à la fin du mois</p>` +
-          `<p class="today-big ${resteAVivre >= 0 ? "positive" : "negative"}">${escapeHtml(eur(resteAVivre))}</p>` +
-          `<p class="recurring-hint" style="margin:0">≈ <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}</strong> par jour (solde courant ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))})</p>` +
-          `<div class="today-row"><span>Prévision au 31 (à ton rythme actuel de ${escapeHtml(eur(avgDaily))}/jour)</span><strong class="${forecast >= 0 ? "positive" : "negative"}">${escapeHtml(eur(forecast))}</strong></div></div>`;
+        html += `<p class="today-hero-label">Reste à vivre · ${escapeHtml(monthName)} · J-${remainingDays}</p>` +
+          `<p class="today-big ${resteAVivre >= 0 ? "" : "negative"}">${escapeHtml(eur(resteAVivre))}</p>` +
+          `<p class="today-hero-sub">soit <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}/jour</strong> · prévision au ${dim} : <strong class="${forecast >= 0 ? "" : "negative"}">${escapeHtml(eur(forecast))}</strong></p>` +
+          `<details class="today-hero-more"><summary>Détail du calcul</summary>Solde courant ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))}. Prévision à ton rythme actuel de ${escapeHtml(eur(avgDaily))}/jour.</details>`;
       } else {
-        html += `<div class="today-alert warn">Pour voir ton <strong>reste à vivre</strong>, ajoute ton compte courant dans l'onglet Patrimoine et tape son solde réel.</div>`;
+        html += `<p class="today-hero-label">${escapeHtml(monthName)} · J-${remainingDays}</p><p class="today-hero-sub">Pour voir ton <strong>reste à vivre</strong>, ajoute ton compte courant dans <a href="#" data-goto="wealth">Comptes</a> et tape son solde réel.</p>`;
       }
+      html += starTrackHtml(game.now) + `</div>`;
 
-      html += `<div class="loans-totals">` +
-        `<div class="stat-card"><p class="label">Dépensé aujourd'hui</p><p class="value">${escapeHtml(eur(spentToday))}</p></div>` +
-        `<div class="stat-card"><p class="label">Dépensé ce mois</p><p class="value">${escapeHtml(eur(spentMonth))}</p></div>` +
-        `<div class="stat-card"><p class="label">Revenus ce mois</p><p class="value">${escapeHtml(eur(incomeMonth))}</p></div></div>`;
+      html += `<div class="today-stats">` +
+        `<div class="stat-card"><p class="label">Aujourd'hui</p><p class="value">${escapeHtml(eur(spentToday))}</p></div>` +
+        `<div class="stat-card"><p class="label">Ce mois</p><p class="value">${escapeHtml(eur(spentMonth))}</p></div>` +
+        `<div class="stat-card"><p class="label">Reçu</p><p class="value positive">${escapeHtml(eur(incomeMonth))}</p></div></div>`;
+      html += todayGameHtml(game);
 
       // Alertes
       const alerts = [];
@@ -9173,6 +9895,11 @@
           subs.map((x, i) => `<div class="today-row"><span>${escapeHtml(x.name)} · ${escapeHtml(eur(x.amount))}/mois</span><button class="secondary" data-sub="${i}">Ajouter aux récurrentes</button></div>`).join("") + `</div>`;
       }
       root.innerHTML = html;
+      root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", (e) => { e.preventDefault(); switchView(el.dataset.goto); }));
+      const lvlCard = root.querySelector("#game-level-card");
+      if (lvlCard) lvlCard.addEventListener("click", () => switchView("rewards"));
+      maybeShowLevelUp(game);
+      applyAura();
       root.querySelectorAll("[data-sub]").forEach((btn) => btn.addEventListener("click", async () => {
         const x = subs[Number(btn.dataset.sub)];
         btn.disabled = true;
