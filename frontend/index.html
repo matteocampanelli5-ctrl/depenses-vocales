@@ -1155,6 +1155,10 @@
   .savings-plan-summary button { margin-top: 0.6rem; }
 
   .budgets-save-row { display: flex; justify-content: flex-end; margin-top: 0.75rem; }
+  .suggest-box { margin-bottom: 0.9rem; }
+  .suggest-line { cursor: pointer; margin: 0; color: var(--text); }
+  .suggest-line input[type="checkbox"] { width: auto; flex: none; }
+  .suggest-amount { width: 5.5rem !important; flex: none; text-align: right; padding: 0.35rem 0.5rem; }
   .savings-goal-row { display: flex; gap: 0.5rem; align-items: center; }
   .savings-goal-row input { flex: 1; }
   .savings-progress.hidden { display: none; }
@@ -1828,6 +1832,8 @@
           barres en dessous montre l'historique des 6 derniers mois (survole
           ou touche une barre pour voir le détail).
         </p>
+        <button type="button" class="secondary" id="budget-suggest-btn" style="width:100%;margin-bottom:0.75rem">✨ Proposer des budgets d'après mes 6 derniers mois</button>
+        <div id="budget-suggest-panel" class="hidden"></div>
         <div id="budgets-list"></div>
         <div class="budgets-save-row">
           <button class="icon-btn" id="budgets-save-all-btn" aria-label="Enregistrer tous les budgets">💾</button>
@@ -2921,6 +2927,7 @@
       }
     }
 
+    document.getElementById("budget-suggest-btn").addEventListener("click", renderBudgetSuggestions);
     document.getElementById("budgets-save-all-btn").addEventListener("click", async () => {
       const entries = Object.entries(budgetInputsByCategory);
       let savedCount = 0;
@@ -3485,6 +3492,74 @@
     }
 
     const budgetInputsByCategory = {};
+
+    // ---- Budgets conseillés : calculés sur les 6 derniers mois complets.
+    // Pour chaque catégorie : la médiane mensuelle (un gros achat ponctuel ne
+    // la fausse pas) mélangée à la moyenne des 3 derniers mois (pour suivre
+    // tes habitudes récentes, mois exceptionnels plafonnés). Les dépenses
+    // « plaisir » sont proposées 10 % en dessous, les dépenses contraintes à
+    // leur niveau habituel. Rien n'est enregistré sans ton accord.
+    const DISCRETIONARY = new Set(["restaurant", "shopping", "loisirs", "sorties", "jeux", "kfet", "gift", "cadeau", "paris", "voyage", "autre"]);
+    function suggestBudgets() {
+      const cur = monthKeyOf(todayIso());
+      const months = lastNMonthKeys(6, monthAddKey(cur, -1));
+      const real = allTransactions.filter((t) => t.category !== TRANSFER_CATEGORY && !t.transfer_account_id && months.includes(monthKeyOf(t.expense_date)));
+      const active = months.filter((k) => real.some((t) => monthKeyOf(t.expense_date) === k));
+      if (active.length < 2) return null;
+      const per = {};
+      for (const t of real) {
+        if ((t.type || "expense") !== "expense") continue;
+        (per[t.category] ||= Object.fromEntries(active.map((k) => [k, 0])));
+        if (monthKeyOf(t.expense_date) in per[t.category]) per[t.category][monthKeyOf(t.expense_date)] += Number(t.amount);
+      }
+      const median = (arr) => { const a = [...arr].sort((x, y) => x - y); const h = Math.floor(a.length / 2); return a.length % 2 ? a[h] : (a[h - 1] + a[h]) / 2; };
+      const roundUp5 = (v) => Math.ceil(v / 5) * 5;
+      const lines = [];
+      for (const [cat, byM] of Object.entries(per)) {
+        const vals = active.map((k) => byM[k]);
+        const med = median(vals);
+        const cap = Math.max(med, 1) * 2;
+        const last3 = active.slice(-3).map((k) => Math.min(byM[k], cap));
+        const avg3 = last3.reduce((a, b) => a + b, 0) / last3.length;
+        let base = (med + avg3) / 2;
+        if (base < 5) continue;
+        const plaisir = DISCRETIONARY.has(cat);
+        const proposed = roundUp5(plaisir ? base * 0.9 : base);
+        const current = allBudgets.find((b) => b.category === cat);
+        lines.push({ cat, med, avg3, proposed, plaisir, current: current ? Number(current.amount) : null, mean: vals.reduce((a, b) => a + b, 0) / vals.length });
+      }
+      lines.sort((a, b) => b.proposed - a.proposed);
+      const incomes = active.map((k) => real.filter((t) => t.type === "income" && monthKeyOf(t.expense_date) === k).reduce((a, t) => a + Number(t.amount), 0));
+      const expenses = active.map((k) => real.filter((t) => (t.type || "expense") === "expense" && monthKeyOf(t.expense_date) === k).reduce((a, t) => a + Number(t.amount), 0));
+      return { lines, months: active, incomeMed: median(incomes), expenseMed: median(expenses), total: lines.reduce((a, l) => a + l.proposed, 0) };
+    }
+    function renderBudgetSuggestions() {
+      const panel = document.getElementById("budget-suggest-panel");
+      const sug = suggestBudgets();
+      panel.classList.remove("hidden");
+      if (!sug) { panel.innerHTML = '<p class="recurring-hint">Il faut au moins 2 mois complets d\'opérations pour proposer des budgets.</p>'; return; }
+      const eur = (v) => currencyFormatter.format(v);
+      const left = sug.incomeMed - sug.total;
+      panel.innerHTML = `<div class="suggest-box"><p class="game-s" style="margin:0 0 0.6rem">Sur ${sug.months.length} mois (${escapeHtml(monthLong(sug.months[0]))} → ${escapeHtml(monthLong(sug.months[sug.months.length - 1]))}) : tu reçois en général <b>${escapeHtml(eur(sug.incomeMed))}</b> et tu dépenses <b>${escapeHtml(eur(sug.expenseMed))}</b> par mois (médianes).</p>` +
+        `<div class="tx-group">${sug.lines.map((l, i) => `<label class="game-item suggest-line"><input type="checkbox" data-sug="${i}" checked><span class="tx-ico">${escapeHtml(categoryIcon(l.cat))}</span><span class="game-mid"><span class="game-t">${escapeHtml(allCategoryLabels[l.cat] || l.cat)}</span><span class="game-s">habituel ${escapeHtml(eur(l.med))} · récent ${escapeHtml(eur(l.avg3))}${l.plaisir ? " · −10 % (plaisir)" : ""}${l.current != null ? ` · actuel ${escapeHtml(eur(l.current))}` : ""}</span></span><input type="number" class="suggest-amount" data-sug-amount="${i}" value="${l.proposed}" min="1" step="5"></label>`).join("")}</div>` +
+        `<p class="game-s" style="margin:0.6rem 0">Total proposé : <b>${escapeHtml(eur(sug.total))}</b>/mois. ${left >= 0 ? `Il resterait environ <b class="positive">${escapeHtml(eur(left))}</b> pour l'épargne.` : `C'est <b class="negative">${escapeHtml(eur(-left))}</b> de plus que tes revenus habituels : le reste vient de ton épargne ou d'aides ponctuelles. Baisse les lignes « plaisir » pour te rapprocher de l'équilibre.`}</p>` +
+        `<div class="game-form-row"><button type="button" class="secondary" id="budget-suggest-cancel">Fermer</button><button type="button" class="primary" id="budget-suggest-apply">Appliquer la sélection</button></div></div>`;
+      panel.querySelector("#budget-suggest-cancel").addEventListener("click", () => panel.classList.add("hidden"));
+      panel.querySelector("#budget-suggest-apply").addEventListener("click", async (e) => {
+        e.target.disabled = true;
+        let n = 0, err = false;
+        for (const [i, l] of sug.lines.entries()) {
+          if (!panel.querySelector(`[data-sug="${i}"]`).checked) continue;
+          const amount = Number(panel.querySelector(`[data-sug-amount="${i}"]`).value);
+          if (!(amount > 0)) continue;
+          try { await saveBudget(l.cat, amount); n += 1; } catch (ex) { err = true; }
+        }
+        showToast(err ? "Certains budgets n'ont pas pu être enregistrés" : `${n} budget${n > 1 ? "s" : ""} enregistré${n > 1 ? "s" : ""}`, err);
+        panel.classList.add("hidden");
+        renderBudgets(allTransactions);
+        if (n) celebrate();
+      });
+    }
     const BUDGET_HISTORY_MONTHS = 6;
 
     // Les N derniers mois (clés "YYYY-MM"), du plus ancien au plus récent,
