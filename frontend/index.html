@@ -1322,6 +1322,22 @@
     gap: 0.9rem;
   }
   .modal h2 { margin: 0 0 0.25rem; font-size: 1.1rem; }
+  .modal { max-height: 92vh; overflow-y: auto; }
+  .modal .sheet-grip { margin-bottom: 0; flex: none; }
+  /* Fenêtre d'ajout : gros montant et catégories en pastilles. */
+  .tx-modal #input-amount {
+    font-size: 2.2rem; font-weight: 600; text-align: center; letter-spacing: -0.02em;
+    background: transparent; border: none; border-bottom: 1px solid var(--border); border-radius: 0; padding: 0.4rem 0;
+  }
+  .tx-modal #input-amount:focus { outline: none; border-bottom-color: var(--accent); }
+  .tx-modal label[for="input-amount"] { text-align: center; }
+  .tx-modal #input-category { display: none; }
+  .cat-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .cat-chip {
+    display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.4rem 0.7rem; border-radius: 999px;
+    border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; font-size: 0.82rem; cursor: pointer;
+  }
+  .cat-chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
   label { font-size: 0.8rem; color: var(--text-dim); display: block; margin-bottom: 0.3rem; }
   input, select {
@@ -2112,7 +2128,8 @@
   </div>
 
   <div class="modal-overlay hidden" id="modal-overlay">
-    <div class="modal">
+    <div class="modal tx-modal">
+      <div class="sheet-grip"></div>
       <h2 id="modal-title">Nouvelle transaction</h2>
 
       <div class="type-toggle" id="type-toggle">
@@ -2128,6 +2145,7 @@
       <div id="tx-category-wrap">
         <label for="input-category">Catégorie</label>
         <select id="input-category"></select>
+        <div class="cat-chips" id="input-category-chips" role="radiogroup" aria-label="Catégorie"></div>
         <input
           type="text"
           id="input-new-category-name"
@@ -2658,6 +2676,29 @@
     const typeToggleEl = document.getElementById("type-toggle");
     const amountInput = document.getElementById("input-amount");
     const categoryInput = document.getElementById("input-category");
+    // Pastilles de catégorie, synchronisées avec la liste (cachée) : la liste
+    // reste la source de vérité pour tout le reste du code.
+    const categoryChipsEl = document.getElementById("input-category-chips");
+    function renderCategoryChips() {
+      categoryChipsEl.innerHTML = "";
+      for (const opt of categoryInput.options) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "cat-chip" + (opt.value === categoryInput.value ? " active" : "");
+        chip.setAttribute("role", "radio");
+        chip.setAttribute("aria-checked", String(opt.value === categoryInput.value));
+        const label = opt.textContent.trim();
+        chip.textContent = opt.value === "__new__" ? label : `${categoryIcon(opt.value)} ${label}`;
+        chip.addEventListener("click", () => {
+          categoryInput.value = opt.value;
+          categoryInput.dispatchEvent(new Event("change", { bubbles: true }));
+          renderCategoryChips();
+        });
+        categoryChipsEl.appendChild(chip);
+      }
+    }
+    new MutationObserver(renderCategoryChips).observe(categoryInput, { childList: true });
+    categoryInput.addEventListener("change", renderCategoryChips);
     const newCategoryNameInput = document.getElementById("input-new-category-name");
     const descriptionInput = document.getElementById("input-description");
     const dateInput = document.getElementById("input-date");
