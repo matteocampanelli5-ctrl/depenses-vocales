@@ -835,6 +835,34 @@
     border: 1px solid var(--border);
   }
   .account-detail { display: none; margin-top: 0.8rem; }
+  /* Sections repliables : on touche le titre pour ouvrir/fermer. */
+  [data-collapsible] > h3 { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0; }
+  [data-collapsible] > h3::after { content: "›"; color: var(--text-dim); font-size: 1.2rem; transform: rotate(90deg); transition: transform 0.15s; }
+  [data-collapsible].collapsed > h3::after { transform: rotate(0deg); }
+  [data-collapsible]:not(.collapsed) > h3 { margin-bottom: 0.6rem; }
+  [data-collapsible].collapsed > :not(h3) { display: none !important; }
+
+  /* Comptes : une ligne par compte, le détail s'ouvre au toucher. */
+  .acc-group { margin-bottom: 0.4rem; }
+  .acc-row { border-bottom: 1px solid var(--border); }
+  .acc-row:last-child { border-bottom: none; }
+  .acc-row.closed { opacity: 0.6; }
+  .acc-row-head {
+    width: 100%; display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0.9rem;
+    background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  }
+  .acc-row-title { flex: 1; min-width: 0; }
+  .acc-row-title .account-card-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .acc-row-balance { font-weight: 600; white-space: nowrap; }
+  .acc-row-balance.unknown { font-weight: 400; font-size: 0.82rem; color: var(--text-dim); }
+  .acc-row-chev { color: var(--text-dim); font-size: 1.2rem; transition: transform 0.15s; }
+  .acc-row.open .acc-row-chev { transform: rotate(90deg); }
+  .acc-row-more { padding: 0 0.9rem 0.9rem 3.6rem; }
+  .acc-row-more .account-card-balance { display: none; }
+  .acc-row-more .account-card-actions-row button { flex: 1; }
+  .acc-row-more .progress-bar { margin: 0.5rem 0 0.3rem; }
+  button.danger-text { color: var(--danger) !important; }
+  @media (max-width: 640px) { .acc-row-more { padding-left: 0.9rem; } }
   .account-detail.visible { display: block; }
   .account-detail .chart-wrap { height: 200px; }
   .account-projection { font-size: 0.85rem; margin: 0.6rem 0; color: var(--text-dim); }
@@ -1920,7 +1948,7 @@
         Prêts) sont déduits du patrimoine net.
       </p>
       <div id="wealth-accounts"></div>
-      <div class="dashboard-row" id="projects-row">
+      <div class="dashboard-row" id="projects-row" data-collapsible="open">
         <h3>Projets de placement (Bricks…)</h3>
         <p class="recurring-hint">
           Chaque projet a son montant investi, son rendement et sa durée. Le solde
@@ -1936,7 +1964,7 @@
         Aucun compte pour l'instant — appuie sur + pour ajouter ta banque, ton
         Livret A, Bricks…
       </div>
-      <div class="dashboard-row" id="networth-row">
+      <div class="dashboard-row" id="networth-row" data-collapsible="closed">
         <h3>Historique du patrimoine</h3>
         <p class="recurring-hint">
           Patrimoine total et endettement relevés à une date donnée (par
@@ -7100,7 +7128,10 @@
         title.className = "wealth-group-title";
         title.textContent = ACCOUNT_KIND_GROUPS[kind];
         listEl.appendChild(title);
-        for (const acc of group) listEl.appendChild(renderAccountCard(acc, states[acc.id]));
+        const box = document.createElement("div");
+        box.className = "tx-group acc-group";
+        for (const acc of group) box.appendChild(renderAccountCard(acc, states[acc.id]));
+        listEl.appendChild(box);
       }
       for (const acc of allAccounts) {
         if (accountOpenState[acc.id]) renderAccountChart(acc, states[acc.id]);
@@ -7111,10 +7142,20 @@
 
     function renderAccountCard(acc, state) {
       const card = document.createElement("div");
-      card.className = `account-card kind-${acc.kind}` + (acc.active === false ? " closed" : "");
+      const isOpen = Boolean(accountOpenState[acc.id]);
+      card.className = `acc-row kind-${acc.kind}` + (acc.active === false ? " closed" : "") + (isOpen ? " open" : "");
 
-      const head = document.createElement("div");
-      head.className = "account-card-head";
+      const head = document.createElement("button");
+      head.type = "button";
+      head.className = "acc-row-head";
+      head.setAttribute("aria-expanded", String(isOpen));
+      head.addEventListener("click", () => {
+        accountOpenState[acc.id] = !accountOpenState[acc.id];
+        renderWealth();
+      });
+      const ico = document.createElement("span");
+      ico.className = "tx-ico";
+      ico.textContent = ({ bank: "🏦", savings: "🐷", investment: "📈", other: "💼" })[acc.kind] || "💼";
       const titleWrap = document.createElement("div");
       const name = document.createElement("div");
       name.className = "account-card-name";
@@ -7122,36 +7163,19 @@
       const kind = document.createElement("div");
       kind.className = "account-card-kind";
       kind.textContent = ACCOUNT_KIND_LABELS[acc.kind] + (acc.annual_rate_pct != null ? ` · ${formatRate(acc.annual_rate_pct)} %/an` : "");
+      titleWrap.className = "acc-row-title";
       titleWrap.appendChild(name);
       titleWrap.appendChild(kind);
-
-      const actions = document.createElement("div");
-      actions.className = "tx-actions";
-      const detailBtn = document.createElement("button");
-      detailBtn.className = "icon-btn";
-      detailBtn.textContent = accountOpenState[acc.id] ? "📉" : "📈";
-      detailBtn.setAttribute("aria-label", "Voir l'évolution");
-      detailBtn.title = "Voir l'évolution du solde";
-      detailBtn.addEventListener("click", () => {
-        accountOpenState[acc.id] = !accountOpenState[acc.id];
-        renderWealth();
-      });
-      const editBtn = document.createElement("button");
-      editBtn.className = "icon-btn";
-      editBtn.textContent = "✏️";
-      editBtn.setAttribute("aria-label", "Modifier le compte");
-      editBtn.addEventListener("click", () => openAccountModal(acc));
-      const deleteBtn = document.createElement("button");
-      deleteBtn.className = "icon-btn danger";
-      deleteBtn.textContent = "🗑️";
-      deleteBtn.setAttribute("aria-label", "Supprimer le compte");
-      deleteBtn.addEventListener("click", () => deleteAccount(acc));
-      actions.appendChild(detailBtn);
-      actions.appendChild(editBtn);
-      actions.appendChild(deleteBtn);
-      head.appendChild(titleWrap);
-      head.appendChild(actions);
+      const balanceShort = document.createElement("span");
+      balanceShort.className = "acc-row-balance" + (state.known ? "" : " unknown");
+      balanceShort.textContent = state.known ? currencyFormatter.format(state.balance) : "à renseigner";
+      const chev = document.createElement("span");
+      chev.className = "acc-row-chev";
+      chev.textContent = "›";
+      head.append(ico, titleWrap, balanceShort, chev);
       card.appendChild(head);
+      const more = document.createElement("div");
+      more.className = "acc-row-more";
 
       const balanceEl = document.createElement("div");
       const statusEl = document.createElement("div");
@@ -7174,8 +7198,8 @@
           ? `${state.moves.length} opération(s) rattachée(s) — tape le solde réel pour suivre ce compte`
           : "Tape le solde réel pour suivre ce compte";
       }
-      card.appendChild(balanceEl);
-      card.appendChild(statusEl);
+      more.appendChild(balanceEl);
+      more.appendChild(statusEl);
 
       const engaged = projectsCapital(acc.id);
       if (engaged > 0) {
@@ -7183,26 +7207,26 @@
         pe.className = "account-card-status";
         pe.textContent = `Disponible ci-dessus · + ${currencyFormatter.format(engaged)} engagés dans des projets → valeur totale ${currencyFormatter.format((state.known ? state.balance : 0) + engaged)}` +
           (state.projectAdjust ? ` (dont ${currencyFormatter.format(state.projectAdjust)} déjà déduits du disponible depuis le dernier solde réel)` : "");
-        card.appendChild(pe);
+        more.appendChild(pe);
       }
       if (acc.ceiling != null && Number(acc.ceiling) > 0 && state.known) {
         const ratio = state.balance / Number(acc.ceiling);
         const bar = document.createElement("div");
         bar.className = "progress-bar" + (ratio >= 1 ? " bad" : ratio >= 0.9 ? " warn" : "");
         bar.innerHTML = `<span style="width:${Math.min(100, Math.max(0, ratio * 100))}%"></span>`;
-        card.appendChild(bar);
+        more.appendChild(bar);
         const cs = document.createElement("div");
         cs.className = "account-card-status";
         const room = Number(acc.ceiling) - state.balance;
         cs.textContent = room > 0 ? `Plafond ${currencyFormatter.format(Number(acc.ceiling))} — il reste ${currencyFormatter.format(room)} de place` : "Plafond atteint";
-        card.appendChild(cs);
+        more.appendChild(cs);
       }
       if (acc.annual_rate_pct != null && state.known && state.balance > 0 && acc.kind === "savings") {
         const est = state.balance * Number(acc.annual_rate_pct) / 100;
         const es = document.createElement("div");
         es.className = "account-card-status";
         es.textContent = `Intérêts estimés : ≈ ${currencyFormatter.format(est)}/an (${currencyFormatter.format(est / 12)}/mois)`;
-        card.appendChild(es);
+        more.appendChild(es);
       }
 
       const row = document.createElement("div");
@@ -7212,10 +7236,19 @@
       balanceBtn.textContent = "Solde réel";
       balanceBtn.addEventListener("click", () => openBalanceModal(acc, state));
       row.appendChild(balanceBtn);
-      card.appendChild(row);
+      const editBtn = document.createElement("button");
+      editBtn.className = "secondary";
+      editBtn.textContent = "Modifier";
+      editBtn.addEventListener("click", () => openAccountModal(acc));
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "secondary danger-text";
+      deleteBtn.textContent = "Supprimer";
+      deleteBtn.addEventListener("click", () => deleteAccount(acc));
+      row.append(editBtn, deleteBtn);
+      more.appendChild(row);
 
       const detail = document.createElement("div");
-      detail.className = "account-detail" + (accountOpenState[acc.id] ? " visible" : "");
+      detail.className = "account-detail visible";
       const chartWrap = document.createElement("div");
       chartWrap.className = "chart-wrap";
       const canvas = document.createElement("canvas");
@@ -7259,7 +7292,8 @@
         }
         detail.appendChild(list);
       }
-      card.appendChild(detail);
+      more.appendChild(detail);
+      if (isOpen) card.appendChild(more);
       return card;
     }
 
@@ -9266,6 +9300,22 @@
         await loadRecurring();
         loadPreferencesUi();
         switchView("today");
+        document.querySelectorAll("[data-collapsible]").forEach((box) => {
+          const h = box.querySelector(":scope > h3");
+          if (!h) return;
+          let saved = null;
+          try { saved = localStorage.getItem("kaching_fold_" + box.id); } catch (e) {}
+          box.classList.toggle("collapsed", saved ? saved === "1" : box.dataset.collapsible === "closed");
+          h.setAttribute("role", "button");
+          h.tabIndex = 0;
+          const toggle = () => {
+            const c = box.classList.toggle("collapsed");
+            try { localStorage.setItem("kaching_fold_" + box.id, c ? "1" : "0"); } catch (e) {}
+            if (!c) window.dispatchEvent(new Event("resize"));
+          };
+          h.addEventListener("click", toggle);
+          h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+        });
         // Explications longues repliées sur téléphone (bouton « Plus d'infos »).
         document.querySelectorAll("p.recurring-hint").forEach((p) => {
           if (p.textContent.trim().length < 170 || p.classList.contains("long-hint")) return;
