@@ -267,6 +267,81 @@
 
   .tx-list { display: flex; flex-direction: column; gap: 0.6rem; }
 
+  /* Historique : barre recherche + Filtres + Outils, le reste replié. */
+  .history-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+  .history-toolbar input { flex: 1; min-width: 0; }
+  .history-tool-btn {
+    position: relative; flex: none; padding: 0 0.9rem; min-height: 40px;
+    border-radius: 10px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); font-size: 0.88rem; cursor: pointer;
+  }
+  .history-tool-btn[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+  .tool-badge {
+    position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 9px; background: var(--accent); color: #fff; font-size: 0.7rem; line-height: 18px; text-align: center;
+  }
+  .history-collapsible { display: none; }
+  .history-collapsible.open { display: block; }
+  #history-filters.open { display: flex; }
+  .filter-date { display: flex; align-items: center; gap: 0.4rem; flex: 1 1 140px; font-size: 0.8rem; color: var(--text-dim); }
+  .filter-date input { flex: 1; min-width: 0; }
+  .link-btn { background: none; border: none; color: var(--accent); font-size: 0.82rem; cursor: pointer; padding: 0.3rem 0; }
+  #history-tools { margin-bottom: 0.75rem; }
+
+  /* Liste groupée par jour, une ligne par opération. */
+  .tx-day {
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--text-dim); margin: 0.5rem 0 -0.25rem; display: flex; justify-content: space-between;
+  }
+  .tx-day:first-child { margin-top: 0; }
+  .tx-day-total { font-weight: 500; text-transform: none; letter-spacing: 0; }
+  .tx-meta { font-size: 0.75rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 0.1rem; }
+
+  /* Feuille d'actions (toucher une opération sur téléphone). */
+  .sheet-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 60; display: none; }
+  .sheet-backdrop.open { display: block; }
+  .action-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: var(--surface);
+    border-top-left-radius: 18px; border-top-right-radius: 18px; border-top: 1px solid var(--border);
+    padding: 0.6rem 1rem calc(1rem + env(safe-area-inset-bottom)); transform: translateY(105%);
+    transition: transform 0.2s ease; max-width: 640px; margin: 0 auto;
+  }
+  .action-sheet.open { transform: translateY(0); }
+  .sheet-grip { width: 38px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 0.8rem; }
+  .sheet-title { font-weight: 600; margin: 0 0 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sheet-sub { font-size: 0.82rem; color: var(--text-dim); margin: 0 0 0.9rem; }
+  .sheet-btn {
+    display: flex; align-items: center; gap: 0.7rem; width: 100%; padding: 0.85rem 0.9rem; margin-bottom: 0.4rem;
+    border-radius: 12px; border: none; background: var(--surface-2); color: var(--text); font-size: 0.98rem; cursor: pointer; text-align: left;
+  }
+  .sheet-btn.danger { color: var(--danger); }
+  .sheet-btn.cancel { justify-content: center; background: transparent; color: var(--text-dim); }
+
+  /* Résumé (Solde, Dépenses…) seulement sur l'Accueil : ailleurs il prenait un
+     tiers de l'écran du téléphone sans rapport avec l'onglet. */
+  body:not([data-view="today"]) .summary,
+  body:not([data-view="today"]) .week-summary { display: none; }
+
+  @media (max-width: 640px) {
+    header { padding-top: 1rem; padding-bottom: 0.6rem; min-height: 58px; }
+    header .subtitle { display: none; }
+    .tx-list { gap: 0; }
+    .tx-card {
+      border: none; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent;
+      padding: 0.65rem 0.15rem; cursor: pointer; gap: 0.6rem;
+    }
+    .tx-card:active { background: var(--surface); }
+    .tx-card .tx-actions { display: none; }
+    .tx-card .tx-top { display: none; }
+    .tx-card .tx-description, .tx-card.transfer .tx-description { font-size: 0.95rem; white-space: nowrap; }
+    .tx-amount { font-size: 0.98rem; }
+    .summary-card { padding: 0.7rem 0.8rem; min-width: 0; }
+    .summary-card .value { font-size: 1.05rem; }
+  }
+  @media (min-width: 641px) {
+    .tx-meta { display: none; }
+  }
+
   .tx-card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -1362,13 +1437,19 @@
     </section>
 
     <section id="view-history">
-      <div class="filter-bar">
-        <input type="text" id="filter-search" placeholder="Rechercher...">
+      <div class="history-toolbar">
+        <input type="search" id="filter-search" placeholder="Rechercher…">
+        <button type="button" class="history-tool-btn" id="history-filters-btn" aria-expanded="false">Filtres<span class="tool-badge hidden" id="history-filters-badge"></span></button>
+        <button type="button" class="history-tool-btn" id="history-tools-btn" aria-expanded="false" aria-label="Outils (doublons, virements en chaîne, supprimer un mois)">⋯<span class="tool-badge hidden" id="history-tools-badge"></span></button>
+      </div>
+      <div class="filter-bar history-collapsible" id="history-filters">
         <select id="filter-category"><option value="">Toutes catégories</option></select>
         <select id="filter-account"><option value="">Tous les comptes</option></select>
-        <input type="date" id="filter-date-start" aria-label="Du">
-        <input type="date" id="filter-date-end" aria-label="Au">
+        <label class="filter-date">Du <input type="date" id="filter-date-start"></label>
+        <label class="filter-date">Au <input type="date" id="filter-date-end"></label>
+        <button type="button" class="link-btn" id="history-filters-clear">Effacer les filtres</button>
       </div>
+      <div class="history-collapsible" id="history-tools">
       <details class="month-delete" id="month-delete">
         <summary>🗑️ Supprimer un mois entier</summary>
         <p class="recurring-hint">Pour rattraper une erreur d'import : efface toutes les opérations d'un mois, pour tous les comptes ou pour un seul. Les charges récurrentes ne sont pas touchées.</p>
@@ -1388,6 +1469,7 @@
         <p class="recurring-hint">Détecte quand tu fais passer de l'argent par un compte intermédiaire (ex. La Poste → BoursoBank → Bricks) et propose de les regrouper en un seul virement (La Poste → Bricks). Seuls les virements de même montant et aux dates identiques ou voisines (3 jours max) sont proposés.</p>
         <div id="chain-list"></div>
       </details>
+      </div>
       <div id="tx-list" class="tx-list"></div>
       <div id="empty-state" class="empty-state" style="display:none;">
         Rien pour l'instant — appuie sur le bouton + pour ajouter une dépense ou un revenu.
@@ -1847,6 +1929,16 @@
   <div class="voice-confirm-banner hidden" id="voice-confirm-banner"></div>
   <button class="fab-mic" id="fab-mic" aria-label="Dicter une dépense ou un revenu, ou poser une question" title="Dicte une dépense/un revenu, ou pose une question (ex : « combien j'ai dépensé en restaurant ce mois-ci ? »)">🎤</button>
   <button class="fab" id="fab-add" aria-label="Ajouter">+</button>
+  <div class="sheet-backdrop" id="tx-sheet-backdrop"></div>
+  <div class="action-sheet" id="tx-sheet" role="dialog" aria-modal="true" aria-labelledby="tx-sheet-title">
+    <div class="sheet-grip"></div>
+    <p class="sheet-title" id="tx-sheet-title"></p>
+    <p class="sheet-sub" id="tx-sheet-sub"></p>
+    <button type="button" class="sheet-btn" id="tx-sheet-edit">✏️ Modifier</button>
+    <button type="button" class="sheet-btn" id="tx-sheet-duplicate">📋 Dupliquer</button>
+    <button type="button" class="sheet-btn danger" id="tx-sheet-delete">🗑️ Supprimer</button>
+    <button type="button" class="sheet-btn cancel" id="tx-sheet-cancel">Annuler</button>
+  </div>
 
   <div class="modal-overlay hidden" id="modal-overlay">
     <div class="modal">
@@ -3551,8 +3643,27 @@
         emptyStateEl.style.display = "none";
       }
 
+      const dayTotals = {};
+      for (const tx of transactions) {
+        if (tx.transfer_account_id) continue;
+        dayTotals[tx.expense_date] = (dayTotals[tx.expense_date] || 0) + (tx.type === "income" ? 1 : -1) * Number(tx.amount);
+      }
+      let lastDay = null;
       for (const tx of transactions) {
         const isTransfer = Boolean(tx.transfer_account_id);
+        if (tx.expense_date !== lastDay) {
+          lastDay = tx.expense_date;
+          const head = document.createElement("div");
+          head.className = "tx-day";
+          const label = document.createElement("span");
+          label.textContent = dayHeaderLabel(tx.expense_date);
+          const total = document.createElement("span");
+          total.className = "tx-day-total";
+          const t = dayTotals[tx.expense_date];
+          if (t) total.textContent = (t > 0 ? "+ " : "− ") + currencyFormatter.format(Math.abs(t));
+          head.append(label, total);
+          listEl.appendChild(head);
+        }
         const card = document.createElement("div");
         card.className = "tx-card " + (isTransfer ? "transfer" : tx.type);
 
@@ -3604,6 +3715,21 @@
 
         main.appendChild(top);
         main.appendChild(desc);
+        // Ligne compacte (téléphone) : catégorie · compte, sous le libellé.
+        const meta = document.createElement("div");
+        meta.className = "tx-meta";
+        const metaParts = [];
+        if (isTransfer) metaParts.push("🔁 Virement");
+        else metaParts.push(allCategoryLabels[tx.category] || tx.category);
+        if (loan) metaParts.push("🏦 " + loan.property_name);
+        if (ownAccountName && !isTransfer) metaParts.push(ownAccountName);
+        if (tx.recurring_expense_id) metaParts.push("récurrente");
+        meta.textContent = metaParts.join(" · ");
+        main.appendChild(meta);
+        card.addEventListener("click", (e) => {
+          if (e.target.closest(".tx-actions")) return;
+          if (window.matchMedia("(max-width: 640px)").matches) openTxSheet(tx);
+        });
 
         const amountEl = document.createElement("div");
         amountEl.className = "tx-amount " + (isTransfer ? "transfer" : tx.type);
@@ -3638,6 +3764,40 @@
         listEl.appendChild(card);
       }
     }
+
+    function dayHeaderLabel(iso) {
+      const today = todayIso();
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      const yIso = new Date(y.getTime() - y.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      if (iso === today) return "Aujourd'hui";
+      if (iso === yIso) return "Hier";
+      const d = new Date(iso + "T00:00:00");
+      const sameYear = iso.slice(0, 4) === today.slice(0, 4);
+      return d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long", year: sameYear ? undefined : "numeric" });
+    }
+
+    // Feuille d'actions d'une opération (téléphone) : remplace les trois
+    // boutons affichés sur chaque ligne.
+    let sheetTx = null;
+    function openTxSheet(tx) {
+      sheetTx = tx;
+      const isTransfer = Boolean(tx.transfer_account_id);
+      document.getElementById("tx-sheet-title").textContent = tx.description || (isTransfer ? "Virement" : (allCategoryLabels[tx.category] || tx.category));
+      const sign = isTransfer ? "⇄ " : (tx.type === "income" ? "+ " : "− ");
+      document.getElementById("tx-sheet-sub").textContent =
+        `${sign}${currencyFormatter.format(tx.amount)} · ${dateFormatter.format(new Date(tx.expense_date + "T00:00:00"))}`;
+      document.getElementById("tx-sheet").classList.add("open");
+      document.getElementById("tx-sheet-backdrop").classList.add("open");
+    }
+    function closeTxSheet() {
+      document.getElementById("tx-sheet").classList.remove("open");
+      document.getElementById("tx-sheet-backdrop").classList.remove("open");
+    }
+    document.getElementById("tx-sheet-backdrop").addEventListener("click", closeTxSheet);
+    document.getElementById("tx-sheet-cancel").addEventListener("click", closeTxSheet);
+    document.getElementById("tx-sheet-edit").addEventListener("click", () => { const tx = sheetTx; closeTxSheet(); if (tx) openModal(tx); });
+    document.getElementById("tx-sheet-duplicate").addEventListener("click", () => { const tx = sheetTx; closeTxSheet(); if (tx) duplicateTransaction(tx); });
+    document.getElementById("tx-sheet-delete").addEventListener("click", () => { const tx = sheetTx; closeTxSheet(); if (tx) deleteTransaction(tx.id); });
 
     // -------------------------------------------------------------------
     // Résumé "cette semaine" (indépendant des filtres de l'historique)
@@ -3704,7 +3864,22 @@
         return true;
       });
       renderTransactionList(filtered);
+      const active = [category, account, dateStart, dateEnd].filter(Boolean).length;
+      const badge = document.getElementById("history-filters-badge");
+      badge.textContent = active; badge.classList.toggle("hidden", !active);
     }
+    function toggleHistoryPanel(btnId, panelId) {
+      const panel = document.getElementById(panelId);
+      const open = !panel.classList.contains("open");
+      panel.classList.toggle("open", open);
+      document.getElementById(btnId).setAttribute("aria-expanded", String(open));
+    }
+    document.getElementById("history-filters-btn").addEventListener("click", () => toggleHistoryPanel("history-filters-btn", "history-filters"));
+    document.getElementById("history-tools-btn").addEventListener("click", () => toggleHistoryPanel("history-tools-btn", "history-tools"));
+    document.getElementById("history-filters-clear").addEventListener("click", () => {
+      ["filter-category", "filter-account", "filter-date-start", "filter-date-end"].forEach((id) => { document.getElementById(id).value = ""; });
+      applyHistoryFilters();
+    });
 
     ["filter-search", "filter-category", "filter-date-start", "filter-date-end", "filter-account"].forEach((id) => {
       document.getElementById(id).addEventListener("input", applyHistoryFilters);
@@ -3745,6 +3920,7 @@
     // -------------------------------------------------------------------
     function switchView(view) {
       currentView = view;
+      document.body.dataset.view = view;
       document.getElementById("tab-today").classList.toggle("active", view === "today");
       document.getElementById("view-today").classList.toggle("visible", view === "today");
       document.getElementById("tab-history").classList.toggle("active", view === "history");
@@ -8845,6 +9021,8 @@
       if (!box) return;
       const groups = findDuplicateGroups();
       document.getElementById("dup-count").textContent = groups.length ? `(${groups.length})` : "";
+      const toolsBadge = document.getElementById("history-tools-badge");
+      if (toolsBadge) { toolsBadge.textContent = groups.length; toolsBadge.classList.toggle("hidden", !groups.length); }
       box.innerHTML = "";
       if (!groups.length) { box.innerHTML = '<p class="recurring-hint">Aucun doublon probable.</p>'; return; }
       for (const g of groups) {
