@@ -696,8 +696,24 @@
   .import-row-issue { color: #f59e0b; font-size: 0.85rem; margin-top: 0.15rem; font-weight: 600; }
   .review-bar { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem; margin: 0.5rem 0; border-radius: 10px; background: rgba(245, 158, 11, 0.14); border: 1px solid #f59e0b; font-size: 0.9rem; }
   .import-row-main { flex: 1; min-width: 0; }
-  .import-row-desc { font-size: 0.88rem; font-weight: 500; }
-  .import-row-desc .import-row-amount.expense { color: var(--danger); }
+  .import-row-desc { font-size: 0.9rem; font-weight: 500; display: flex; gap: 0.6rem; align-items: baseline; }
+  .import-row-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .import-row-amount { white-space: nowrap; font-weight: 600; }
+  .import-row-amount.transfer { color: var(--info); }
+  .import-row-raw { font-size: 0.72rem; color: var(--text-dim); opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.1rem; cursor: pointer; }
+  .import-row-raw.full { white-space: normal; }
+  .import-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.35rem; }
+  .import-tag { font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
+  .import-tag.info { color: var(--info); border-color: color-mix(in oklch, var(--info) 35%, transparent); }
+  .import-tag.ok { color: var(--success); border-color: color-mix(in oklch, var(--success) 35%, transparent); }
+  .import-tag.warn { color: oklch(0.8 0.15 75); border-color: color-mix(in oklch, oklch(0.8 0.15 75) 40%, transparent); }
+  @media (max-width: 640px) {
+    .import-row { flex-wrap: wrap; align-items: flex-start; }
+    .import-row input[type="checkbox"] { margin-top: 0.2rem; }
+    .import-row .import-row-main { flex: 1 1 calc(100% - 2.2rem); }
+    .import-row select { flex: 1 1 100%; max-width: none !important; margin-left: 1.6rem; padding-top: 0.45rem; padding-bottom: 0.45rem; font-size: 0.85rem; }
+  }
+  .import-row-desc .import-row-amount.expense { color: var(--text); }
   .import-row-desc .import-row-amount.income { color: var(--success); }
   .import-row-meta { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.1rem; }
   .import-row-dup { color: var(--danger); }
@@ -7985,46 +8001,46 @@
         main.className = "import-row-main";
         const desc = document.createElement("div");
         desc.className = "import-row-desc";
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "import-row-title";
+        titleSpan.textContent = (row.recurring_group_id ? "🔁 " : "") + (row.description || "—");
         const amountSpan = document.createElement("span");
-        amountSpan.className = "import-row-amount " + row.type;
-        amountSpan.textContent = (row.type === "expense" ? "-" : "+") + currencyFormatter.format(row.amount);
-        desc.append((row.recurring_group_id ? "🔁 " : "") + (row.description || "") + " — ");
-        desc.appendChild(amountSpan);
-        if (row.loan_id) {
-          const loanTag = document.createElement("span");
-          loanTag.className = "import-row-transfer";
-          const loan = allLoans.find((l) => l.id === row.loan_id);
-          loanTag.textContent = ` · mensualité de ${loan ? loan.property_name : "ton prêt"}`;
-          desc.appendChild(loanTag);
-        }
-        if (row.transfer_account_id) {
-          const transferTag = document.createElement("span");
-          transferTag.className = "import-row-transfer";
-          const otherName = accountName(row.transfer_account_id) || "un de tes comptes";
-          transferTag.textContent = (row.type === "expense" ? ` · virement vers ${otherName}` : ` · virement depuis ${otherName}`) + (row.already_recorded ? " · 🔗 déjà enregistré de l'autre côté (pas de doublon)" : "");
-          desc.appendChild(transferTag);
-        }
+        amountSpan.className = "import-row-amount " + (row.transfer_account_id ? "transfer" : row.type);
+        amountSpan.textContent = (row.type === "expense" ? "− " : "+ ") + currencyFormatter.format(row.amount);
+        desc.append(titleSpan, amountSpan);
 
+        // Date et fichier, puis le libellé brut de la banque sur une ligne.
         const meta = document.createElement("div");
         meta.className = "import-row-meta";
         meta.textContent = (row.date_precision === "day"
-          ? `${row.expense_date} · ${row.source_label}`
-          : `${row.expense_date.slice(0, 7)} (jour non précisé) · ${row.source_label}`) + (row.fileName ? ` · 📄 ${row.fileName}` : "");
-        if (row.likely_duplicate) {
-          const dupSpan = document.createElement("span");
-          dupSpan.className = "import-row-dup";
-          dupSpan.textContent = " · déjà présente ?";
-          meta.appendChild(dupSpan);
+          ? dateFormatter.format(new Date(row.expense_date + "T00:00:00"))
+          : `${row.expense_date.slice(0, 7)} (jour non précisé)`) + (row.fileName ? ` · 📄 ${row.fileName}` : "");
+        const raw = document.createElement("div");
+        raw.className = "import-row-raw";
+        raw.textContent = row.source_label || "";
+        raw.title = row.source_label || "";
+        raw.addEventListener("click", () => raw.classList.toggle("full"));
+
+        // Pastilles : virement, prêt, doublon, règle apprise.
+        const tags = document.createElement("div");
+        tags.className = "import-tags";
+        const tag = (text, cls) => { const t = document.createElement("span"); t.className = "import-tag " + cls; t.textContent = text; tags.appendChild(t); };
+        if (row.loan_id) {
+          const loan = allLoans.find((l) => l.id === row.loan_id);
+          tag(`🏦 ${loan ? loan.property_name : "prêt"}`, "info");
         }
-        if (row.rule_applied) {
-          const ruleSpan = document.createElement("span");
-          ruleSpan.className = "import-row-transfer";
-          ruleSpan.textContent = " · 🧠 catégorie apprise";
-          meta.appendChild(ruleSpan);
+        if (row.transfer_account_id) {
+          const otherName = accountName(row.transfer_account_id) || "un de tes comptes";
+          tag(row.type === "expense" ? `⇄ vers ${otherName}` : `⇄ depuis ${otherName}`, "info");
+          if (row.already_recorded) tag("🔗 déjà enregistré de l'autre côté", "ok");
         }
+        if (row.likely_duplicate) tag("déjà présente ?", "warn");
+        if (row.rule_applied) tag("🧠 catégorie apprise", "muted");
 
         main.appendChild(desc);
         main.appendChild(meta);
+        if (row.source_label) main.appendChild(raw);
+        if (tags.childElementCount) main.appendChild(tags);
         if (issue) {
           const issueEl = document.createElement("div");
           issueEl.className = "import-row-issue";
