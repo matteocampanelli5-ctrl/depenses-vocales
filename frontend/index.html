@@ -10002,6 +10002,11 @@
         if (st.matured) alerts.push(["warn", `⏰ Le projet « ${p.name} » a atteint son échéance : le capital est à récupérer.`]);
         else if (left >= 0 && left <= 30) alerts.push(["good", `📅 Le projet « ${p.name} » se termine dans ${left} jour${left > 1 ? "s" : ""}.`]);
       }
+      // Avances (courses pour les parents…) : ce qui n'a pas encore été remboursé.
+      const avances = allRows.filter((t) => t.category === "avance" && !t.transfer_account_id);
+      const avOut = avances.filter((t) => (t.type || "expense") === "expense").reduce((a, t) => a + Number(t.amount), 0);
+      const avIn = avances.filter((t) => t.type === "income").reduce((a, t) => a + Number(t.amount), 0);
+      if (avOut - avIn > 20) alerts.push(["warn", `🤝 Avances : ${eur(avOut)} avancés pour d'autres, ${eur(avIn)} remboursés — reste ${eur(avOut - avIn)} à te faire rembourser (ou à reclasser si c'était pour toi).`]);
       if (alerts.length === 0) alerts.push(["good", "✅ Rien à signaler : budgets, plafonds et projets sont dans les clous."]);
       html += `<h3 style="margin:1rem 0 0.25rem;">Alertes</h3>` + alerts.map(([c, t]) => `<div class="today-alert ${c}">${escapeHtml(t)}</div>`).join("");
 
