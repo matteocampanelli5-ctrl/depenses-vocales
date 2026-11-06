@@ -230,3 +230,19 @@ def delete_net_worth_snapshot(snapshot_id: UUID, user_id: str = Depends(require_
     if not result.data:
         raise HTTPException(status_code=404, detail="Point d'historique introuvable")
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Projection du compte Bricks (série mensuelle calculée hors application)
+# ---------------------------------------------------------------------------
+@router.get("/api/bricks-projection")
+def list_bricks_projection(user_id: str = Depends(require_user)) -> list[dict]:
+    client = get_supabase_client()
+    return (
+        client.table("bricks_projection")
+        .select("month_key,label,placed,cash")
+        .eq("user_id", user_id)
+        .order("month_key")
+        .execute()
+        .data
+    )

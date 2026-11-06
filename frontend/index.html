@@ -2153,6 +2153,17 @@
         </div>
         <div id="networth-list"></div>
       </div>
+
+      <div class="dashboard-row" id="bricks-proj-row" data-collapsible="closed" style="display:none;">
+        <h3>Projection du compte Bricks</h3>
+        <p class="recurring-hint long-hint">
+          Valeur future de ton compte Bricks si tous les paiements et remboursements
+          arrivent à l'heure, sans réinvestissement. Les intérêts sont comptés nets de
+          flat tax (31,4 %).
+        </p>
+        <div id="bricks-proj-cards" class="stat-grid"></div>
+        <div class="chart-wrap"><canvas id="chart-bricks-proj"></canvas></div>
+      </div>
     </section>
 
     <section id="view-loans" class="loans-section">
@@ -7348,6 +7359,7 @@
       } catch (err) {
         showToast("Erreur de chargement des comptes : " + (err.message || "une erreur est survenue"), true);
       }
+      await loadBricksProjection();
       refreshAccountSelects();
     }
 
@@ -7737,7 +7749,50 @@
       }, emptyEl);
     }
 
+    let bricksProj = [];
+    let bricksProjChart = null;
+    async function loadBricksProjection() {
+      try { bricksProj = await apiFetch("/api/bricks-projection"); } catch (e) { bricksProj = []; }
+    }
+    function renderBricksProjection() {
+      const row = document.getElementById("bricks-proj-row");
+      if (!row) return;
+      if (bricksProjChart) { bricksProjChart.destroy(); bricksProjChart = null; }
+      if (!bricksProj.length) { row.style.display = "none"; return; }
+      row.style.display = "";
+      const tot = (p) => Number(p.placed) + Number(p.cash);
+      const first = bricksProj[0];
+      const at = (n) => bricksProj[Math.min(n, bricksProj.length - 1)];
+      const horizons = [["Aujourd'hui", first], ["6 mois", at(6)], ["1 an", at(12)], ["2 ans", at(24)], ["3 ans", at(36)], ["Fin", bricksProj[bricksProj.length - 1]]];
+      const cards = document.getElementById("bricks-proj-cards");
+      cards.innerHTML = "";
+      for (const [name, p] of horizons) {
+        const c = document.createElement("div");
+        c.className = "stat-card";
+        c.innerHTML = `<p class="label">${escapeHtml(name)} · ${escapeHtml(p.label)}</p><p class="value">${escapeHtml(currencyFormatter.format(tot(p)))}</p>`;
+        c.title = `Placé ${currencyFormatter.format(Number(p.placed))} — disponible ${currencyFormatter.format(Number(p.cash))}`;
+        cards.appendChild(c);
+      }
+      bricksProjChart = safeCreateChart(document.getElementById("chart-bricks-proj"), {
+        type: "line",
+        data: {
+          labels: bricksProj.map((p) => p.label),
+          datasets: [
+            { label: "Total", data: bricksProj.map(tot), borderColor: CHART_COLORS[1], tension: 0.15, pointRadius: 0 },
+            { label: "Disponible", data: bricksProj.map((p) => Number(p.cash)), borderColor: CHART_COLORS[0], tension: 0.15, pointRadius: 0 },
+            { label: "Placé", data: bricksProj.map((p) => Number(p.placed)), borderColor: CHART_COLORS[2], tension: 0.15, pointRadius: 0 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: { x: { ticks: { color: CH_DIM, maxTicksLimit: 6 }, grid: { color: CH_GRID } }, y: { ticks: { color: CH_DIM }, grid: { color: CH_GRID } } },
+          plugins: { legend: { labels: { color: CH_TEXT } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label} : ${currencyFormatter.format(ctx.parsed.y)}` } } },
+        },
+      });
+    }
+
     function renderNetWorth() {
+      renderBricksProjection();
       const canvas = document.getElementById("chart-networth");
       const wrap = document.getElementById("networth-chart-wrap");
       const emptyEl = document.getElementById("networth-empty");

@@ -96,6 +96,7 @@ _RESET_TABLES = [
     "category_rules",
     "account_balances",
     "net_worth_snapshots",
+    "bricks_projection",
     "accounts",
 ]
 
