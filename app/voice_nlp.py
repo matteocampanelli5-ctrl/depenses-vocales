@@ -4,7 +4,9 @@ vraies données, jamais inventé par l'IA), et extraction IA (API Anthropic)
 qui transforme une phrase dictée en brouillon structuré.
 """
 
+import difflib
 import json
+import os
 import re
 import unicodedata
 from datetime import date, timedelta
@@ -424,6 +426,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans aucun texte autour, selon l'
   "is_recurring": true si la phrase indique explicitement qu'il s'agit d'une charge qui se répète chaque mois (mots comme "récurrent", "récurrence", "abonnement", "tous les mois", "chaque mois", "mensuel"), false sinon,
   "transfer_to_account": si la phrase décrit de l'argent que l'utilisateur met de côté ou déplace VERS un de SES PROPRES comptes listés plus bas (ex: "j'ai mis 200 euros sur mon livret A", "j'ai versé 500 euros sur Bricks", "j'ai viré 300 euros vers mon livret"), le nom EXACT de ce compte tel qu'écrit dans la liste ; sinon null,
   "transfer_from_account": si la phrase décrit de l'argent retiré D'UN de ses propres comptes listés plus bas (ex: "j'ai retiré 100 euros de mon livret A", "j'ai sorti 200 euros de Bricks"), ou précise le compte de départ d'un virement ("depuis mon Crédit Agricole"), le nom EXACT de ce compte ; sinon null,
+  "account": si la phrase précise sur QUEL compte de l'utilisateur l'opération a été faite sans que ce soit un virement entre ses comptes (ex: "j'ai payé 30 euros d'essence sur mon compte Bourso", "payé avec la carte de La poste"), le nom de ce compte tel que tu l'entends ; sinon null. N'invente pas de compte : laisse null si la phrase n'en nomme aucun,
   "needs_confirmation": true UNIQUEMENT si tu as un doute réel sur l'interprétation (montant approximatif ou peu clair, catégorie devinée sans élément solide, structure de phrase bizarre ou ambiguë, plusieurs lectures possibles) ; false si l'interprétation est claire et directe — ne mets pas true par excès de prudence, seulement en cas de doute véritable
 }
 
@@ -456,6 +459,8 @@ RÈGLES IMPORTANTES :
 - Si la phrase ne mentionne aucune date (transaction) ou aucune période (question), le champ correspondant doit être null.
 - is_correction doit rester false par défaut : en cas de doute, considère qu'il s'agit d'une nouvelle transaction plutôt que d'une correction.
 - is_recurring doit rester false par défaut : ne le mets à true que si la récurrence est clairement exprimée à l'oral, jamais par déduction (ex: "le loyer" seul ne suffit pas, il faut un mot indiquant explicitement la répétition).
+- Le carburant (essence, gazole, diesel, "le plein", station-service, Total, Esso), les péages, les transports en commun, les billets de train, le parking et l'entretien de la voiture relèvent de la catégorie "transport", jamais "autre".
+- Le nom d'un compte est souvent mal retranscrit par la dictée ("Boursault" ou "Bourseau" pour "Bourso") : donne-le tel que tu l'entends, le rapprochement avec la vraie liste est fait ensuite.
 - Un virement entre deux comptes de l'utilisateur (épargne mise sur son livret, versement sur son placement, retrait de son livret) n'est ni une dépense ni un revenu : renseigne transfer_to_account et/ou transfer_from_account. Payer quelqu'un d'autre ou un commerce n'est JAMAIS un virement entre ses comptes : dans ce cas les deux champs restent null.
 - Une mensualité de prêt ou de crédit (immobilier, étudiant, auto...) va dans la catégorie "credit".
 
@@ -502,6 +507,42 @@ def _build_voice_system_prompt(
     )
 
 
+def _loads_ai_json(raw: str) -> dict:
+    """Lit l'objet JSON renvoyé par l'IA même quand il n'est pas seul sur la
+    ligne. Le modèle ajoute parfois une phrase avant ou après, des ```json,
+    ou s'arrête au milieu quand la réponse est coupée : plutôt que de faire
+    échouer la commande vocale, on retrouve le premier objet complet, et en
+    dernier recours on referme les accolades manquantes."""
+    text = re.sub(r"^```(json)?|```$", "", (raw or "").strip(), flags=re.MULTILINE).strip()
+    start = text.find("{")
+    if start == -1:
+        raise ValueError("aucun objet JSON dans la réponse")
+    body = text[start:]
+    try:
+        # raw_decode s'arrête au premier objet complet et ignore la suite.
+        return json.JSONDecoder().raw_decode(body)[0]
+    except json.JSONDecodeError:
+        pass
+    # Réponse coupée en plein milieu : on retire la dernière clé incomplète
+    # puis on referme ce qui reste ouvert.
+    trimmed = body.rstrip().rstrip(",")
+    for _ in range(40):
+        candidate = trimmed
+        opened = candidate.count("{") - candidate.count("}")
+        brackets = candidate.count("[") - candidate.count("]")
+        if candidate.count('"') % 2:
+            candidate += '"'
+        candidate += "]" * max(0, brackets) + "}" * max(0, opened)
+        try:
+            return json.JSONDecoder().raw_decode(candidate)[0]
+        except json.JSONDecodeError:
+            cut = max(trimmed.rfind(","), trimmed.rfind("{"))
+            if cut <= 0:
+                break
+            trimmed = trimmed[:cut].rstrip().rstrip(",")
+    raise ValueError("JSON illisible")
+
+
 def _account_key(name: str) -> str:
     plain = "".join(c for c in unicodedata.normalize("NFD", name) if unicodedata.category(c) != "Mn")
     return re.sub(r"\s+", " ", plain).strip().lower()
@@ -542,17 +583,82 @@ def call_claude_extraction(
     raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
 
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as exc:
+        data = _loads_ai_json(raw)
+    except ValueError as exc:
         raise HTTPException(
-            status_code=502, detail=f"Réponse IA invalide (JSON attendu) : {raw[:200]}"
+            status_code=502,
+            detail="Je n'ai pas réussi à interpréter cette phrase, réessaie en la reformulant.",
         ) from exc
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=502,
+            detail="Je n'ai pas réussi à interpréter cette phrase, réessaie en la reformulant.",
+        )
     return data
 
 
 _VOICE_QUESTION_METRICS = {
     "spent", "earned", "balance", "budget_remaining", "budget_status", "savings_progress",
 }
+
+
+def _phonetic_key(text: str) -> str:
+    """Écriture approximative d'un nom tel qu'il s'entend, pour rapprocher ce
+    que la dictée a écrit du vrai nom du compte : « Boursault », « Bourseau »
+    et « Bourso » s'écrivent différemment mais se prononcent pareil."""
+    t = re.sub(r"[^a-z]", "", _account_key(text))
+    for a, b in (
+        ("eaux", "o"), ("eau", "o"), ("ault", "o"), ("auld", "o"), ("aud", "o"),
+        ("aut", "o"), ("aux", "o"), ("au", "o"), ("ph", "f"), ("qu", "k"),
+        ("ck", "k"), ("ce", "se"), ("ci", "si"), ("cy", "si"), ("ch", "k"),
+    ):
+        t = t.replace(a, b)
+    t = t.replace("c", "k").replace("q", "k").replace("x", "ks")
+    t = t.replace("y", "i").replace("z", "s").replace("h", "")
+    t = re.sub(r"(.)\1+", r"\1", t)
+    t = re.sub(r"[stdxpe]+$", "", t)
+    return t
+
+
+def _closest_account(spoken: str, accounts: list[dict]) -> dict | None:
+    """Retrouve le compte visé quand la dictée a déformé son nom : la
+    reconnaissance vocale de l'iPhone écrit « Boursault » ou « Bourseau »
+    pour « Bourso ». On compare à chaque compte actif, à l'écrit et au son,
+    et on ne retient le meilleur que s'il est nettement devant les autres."""
+    base = _account_key(spoken)
+    # « mon compte Bourso », « le livret A » : on essaie avec et sans les
+    # mots de liaison, car « livret » fait aussi partie d'un vrai nom.
+    stripped = re.sub(r"^(mon|ma|mes|le|la|les|du|de la|des|sur|avec)\s+", "", base).strip()
+    stripped = re.sub(r"^(compte|comptes|carte)\s+", "", stripped).strip()
+    targets = [t for t in dict.fromkeys([base, stripped]) if len(t) >= 3]
+    if not targets:
+        return None
+
+    def score(target: str, key: str) -> tuple[float, float]:
+        plain = difflib.SequenceMatcher(None, target, key).ratio()
+        sound = difflib.SequenceMatcher(None, _phonetic_key(target), _phonetic_key(key)).ratio()
+        best = max(plain, sound)
+        prefix = len(os.path.commonprefix([target, key]))
+        # Un long préfixe commun est un signal plus sûr que la ressemblance
+        # globale : « boursault » et « bourso » partagent « bours ».
+        if prefix >= 5 and prefix >= min(len(target), len(key)) * 0.6:
+            best = max(best, 0.8)
+        return best, plain
+
+    scored = []
+    for acc in accounts:
+        key = _account_key(acc["name"])
+        if not key:
+            continue
+        scored.append((*max(score(t, key) for t in targets), acc))
+    # À égalité, on départage sur la ressemblance écrite brute : « Bourso »
+    # passe devant « Bourso livret » pour une dictée « Boursault ».
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    if not scored or scored[0][0] < 0.7:
+        return None
+    if len(scored) > 1 and scored[0][0] - scored[1][0] < 0.08 and scored[0][1] - scored[1][1] < 0.08:
+        return None  # deux comptes aussi proches l'un que l'autre : trop risqué
+    return scored[0][2]
 
 
 def _resolve_voice_transfer(data: dict, accounts: list[dict]) -> tuple[dict | None, dict | None]:
@@ -566,7 +672,9 @@ def _resolve_voice_transfer(data: dict, accounts: list[dict]) -> tuple[dict | No
     by_id = {acc["id"]: acc for acc in active}
 
     def lookup(name):
-        return by_name.get(_account_key(name)) if isinstance(name, str) and name.strip() else None
+        if not isinstance(name, str) or not name.strip():
+            return None
+        return by_name.get(_account_key(name)) or _closest_account(name, active)
 
     to_acc = lookup(data.get("transfer_to_account"))
     from_acc = lookup(data.get("transfer_from_account"))
@@ -579,6 +687,14 @@ def _resolve_voice_transfer(data: dict, accounts: list[dict]) -> tuple[dict | No
         return None, None
     if not to_acc and not from_acc:
         return None, None
+    # Côté non précisé mais compte nommé ailleurs dans la phrase
+    # ("j'ai mis 200 € sur mon livret A depuis Bourso").
+    named = lookup(data.get("account"))
+    if named:
+        if to_acc and not from_acc and named["id"] != to_acc["id"]:
+            from_acc = named
+        elif from_acc and not to_acc and named["id"] != from_acc["id"]:
+            to_acc = named
     # Côté non précisé : le compte courant, s'il n'y en a qu'un.
     banks = [acc for acc in active if acc.get("kind") == "bank"]
     default_bank = banks[0] if len(banks) == 1 else None
@@ -645,6 +761,18 @@ def _finalize_transaction(
             "transfer_account_id": other["id"],
             "transfer_label": f"{from_acc['name'] if from_acc else '?'} → {to_acc['name'] if to_acc else '?'}",
         }
+
+    # Dépense ou revenu ordinaire dont la phrase nomme le compte ("payé sur
+    # mon compte Bourso") : on la rattache à ce compte, le nom dicté étant
+    # rapproché de la vraie liste.
+    if not transfer.get("is_transfer"):
+        spoken = data.get("account")
+        if isinstance(spoken, str) and spoken.strip():
+            active = [acc for acc in (accounts or []) if acc.get("active", True)]
+            by_name = {_account_key(acc["name"]): acc for acc in active}
+            named = by_name.get(_account_key(spoken)) or _closest_account(spoken, active)
+            if named:
+                transfer = {**transfer, "account_id": named["id"]}
 
     return VoiceParseResult(
         type=tx_type,
@@ -806,6 +934,9 @@ def call_claude_confirm(reply_text: str, pending: dict, expense_categories: set[
     raw = "".join(block.text for block in message.content if hasattr(block, "text")).strip()
     raw = re.sub(r"^```(json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=502, detail=f"Réponse IA invalide (JSON attendu) : {raw[:200]}") from exc
+        return _loads_ai_json(raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Je n'ai pas réussi à interpréter cette correction, réessaie en la reformulant.",
+        ) from exc

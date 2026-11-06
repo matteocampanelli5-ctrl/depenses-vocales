@@ -6519,6 +6519,8 @@
         category: parsed.category,
         description: parsed.description,
         expense_date: parsed.expense_date,
+        // « payé sur mon compte Bourso » : le compte nommé à l'oral.
+        account_id: parsed.account_id || null,
       };
 
       if (parsed.is_correction && lastVoiceTransactionId) {
