@@ -779,6 +779,11 @@ async def preview_generic_import(
         if learned and learned in valid_cats:
             category = learned
             rule_applied = True
+            # Une avance (courses pour quelqu'un) ne concerne que les vrais
+            # paniers : un petit achat de 20 € ou moins dans le même magasin
+            # est une dépense perso.
+            if learned == "avance" and amount <= 20:
+                category = "courses" if "courses" in valid_cats else "autre"
         transfer_name = raw.get("transfer_account")
         transfer_account_id = (
             transfer_targets.get(_normalize_key(transfer_name)) if isinstance(transfer_name, str) else None
