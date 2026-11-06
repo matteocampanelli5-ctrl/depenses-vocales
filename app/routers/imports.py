@@ -112,7 +112,19 @@ MAX_WORKBOOK_FILE_SIZE = 4 * 1024 * 1024
 MAX_GENERIC_IMPORT_TEXT_CHARS = 60_000  # ~15k tokens, large marge pour un relevé annuel
 
 _SPREADSHEET_EXTENSIONS = (".xlsx", ".xlsm")
-_ACCEPTED_EXTENSIONS = (".csv", ".pdf", *_SPREADSHEET_EXTENSIONS)
+# Photo d'un ticket de caisse ou capture d'écran d'une appli bancaire : l'IA
+# sait les lire directement, c'est le format le plus naturel depuis un
+# téléphone. Le HEIC des iPhone est converti côté navigateur en JPEG.
+_IMAGE_MEDIA_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
+_IMAGE_EXTENSIONS = tuple(_IMAGE_MEDIA_TYPES)
+_ACCEPTED_EXTENSIONS = (".csv", ".pdf", *_SPREADSHEET_EXTENSIONS, *_IMAGE_EXTENSIONS)
+MAX_IMAGE_IMPORT_FILE_SIZE = 5 * 1024 * 1024
 
 _KNOWN_RECURRING_KEYWORDS = {
     "netflix", "spotify", "disney", "canal+", "canal plus", "amazon prime",
@@ -609,20 +621,51 @@ async def preview_generic_import(
 ) -> dict:
     filename = (file.filename or "").lower()
     if not filename.endswith(_ACCEPTED_EXTENSIONS):
-        raise HTTPException(status_code=400, detail="Formats acceptés : .csv, .xlsx, .xlsm ou .pdf")
+        raise HTTPException(
+            status_code=400,
+            detail="Formats acceptés : .csv, .xlsx, .xlsm, .pdf ou une image (photo de ticket, capture d'écran)",
+        )
     is_pdf = filename.endswith(".pdf")
+    image_media_type = next(
+        (mt for ext, mt in _IMAGE_MEDIA_TYPES.items() if filename.endswith(ext)), None
+    )
 
     raw_bytes = await file.read()
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="Fichier vide")
-    max_size = MAX_PDF_IMPORT_FILE_SIZE if is_pdf else (
-        MAX_WORKBOOK_FILE_SIZE if filename.endswith(_SPREADSHEET_EXTENSIONS) else MAX_GENERIC_IMPORT_FILE_SIZE
-    )
+    if image_media_type:
+        max_size = MAX_IMAGE_IMPORT_FILE_SIZE
+    elif is_pdf:
+        max_size = MAX_PDF_IMPORT_FILE_SIZE
+    else:
+        max_size = (
+            MAX_WORKBOOK_FILE_SIZE if filename.endswith(_SPREADSHEET_EXTENSIONS) else MAX_GENERIC_IMPORT_FILE_SIZE
+        )
     if len(raw_bytes) > max_size:
         raise HTTPException(status_code=400, detail=f"Fichier trop volumineux ({max_size // (1024 * 1024)} Mo maximum)")
 
     statement_balances = None
-    if is_pdf:
+    if image_media_type:
+        ai_content: str | list[dict] = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": image_media_type,
+                    "data": base64.b64encode(raw_bytes).decode("ascii"),
+                },
+            },
+            {
+                "type": "text",
+                "text": (
+                    "Voici une photo de ticket de caisse ou une capture d'écran d'opérations "
+                    "bancaires. Relève chaque opération visible. Si le total du ticket est "
+                    "affiché, c'est lui qui compte comme montant (une seule opération), pas le "
+                    "détail article par article. Si la date n'est pas lisible, laisse-la vide."
+                ),
+            },
+        ]
+    elif is_pdf:
         if not raw_bytes.startswith(b"%PDF"):
             raise HTTPException(status_code=400, detail="Ce fichier n'est pas un PDF valide")
         annotated = _annotate_pdf_columns(raw_bytes)

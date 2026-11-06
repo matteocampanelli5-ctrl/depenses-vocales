@@ -1461,6 +1461,10 @@
     border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; font-size: 0.82rem; cursor: pointer;
   }
   .cat-chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  .quick-chips { margin: 0 0.2rem 0.2rem; }
+  .quick-chips:empty { display: none; }
+  .quick-chips .cat-chip { padding: 0.55rem 0.8rem; font-size: 0.88rem; }
+  .quick-chips .cat-chip strong { font-weight: 600; }
 
   label { font-size: 0.8rem; color: var(--text-dim); display: block; margin-bottom: 0.3rem; }
   input, select {
@@ -1958,10 +1962,11 @@
         </div>
         <div class="import-dropzone" id="generic-import-dropzone">
           <div class="import-file-row">
-            <input type="file" id="generic-import-file-input" multiple accept=".csv,.xlsx,.xlsm,.pdf,text/csv,application/pdf">
+            <input type="file" id="generic-import-file-input" multiple accept=".csv,.xlsx,.xlsm,.pdf,text/csv,application/pdf,image/*,.heic,.heif">
             <button class="primary" id="generic-import-analyze-btn">Analyser</button>
           </div>
           <p class="import-dropzone-hint">ou glisse-dépose un ou plusieurs fichiers .csv / .xlsx / .xlsm / .pdf ici</p>
+          <p class="import-dropzone-hint">Tu peux aussi envoyer une <strong>photo de ticket de caisse</strong> ou une <strong>capture d'écran</strong> de ton appli bancaire : l'IA la lit directement.</p>
           <p class="import-dropzone-hint">Plusieurs fichiers : ils doivent venir du même compte (choisis-le ci-dessus). Les opérations en double entre fichiers sont décochées. Pour un Excel à plusieurs onglets (prêt, patrimoine), importe-le seul.</p>
         </div>
         <div id="workbook-sheets-section" class="hidden">
@@ -2242,9 +2247,11 @@
   <div class="sheet-backdrop" id="plus-sheet-backdrop"></div>
   <div class="action-sheet" id="plus-sheet" role="dialog" aria-modal="true" aria-label="Ajouter et autres onglets">
     <div class="sheet-grip"></div>
+    <p class="sheet-section" id="quick-add-section" hidden>Rapide · un appui enregistre</p>
+    <div class="cat-chips quick-chips" id="quick-add-chips"></div>
     <button type="button" class="sheet-btn rich" id="plus-voice"><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><span><span class="sheet-btn-t">Dicter</span><span class="sheet-btn-s">« 12 € de resto hier » ou une question</span></span></button>
     <button type="button" class="sheet-btn rich" id="plus-add"><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span><span class="sheet-btn-t">Ajouter à la main</span><span class="sheet-btn-s">Dépense, revenu ou virement</span></span></button>
-    <button type="button" class="sheet-btn rich" id="plus-import"><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg></span><span><span class="sheet-btn-t">Importer un relevé</span><span class="sheet-btn-s">PDF, CSV ou Excel</span></span></button>
+    <button type="button" class="sheet-btn rich" id="plus-import"><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg></span><span><span class="sheet-btn-t">Importer un relevé</span><span class="sheet-btn-s">PDF, Excel, CSV ou photo de ticket</span></span></button>
     <p class="sheet-section">Plus</p>
     <div class="sheet-grid">
       <button type="button" data-view="recurring"><span class="sheet-ico">🔁</span>Récurrentes</button>
@@ -4535,7 +4542,83 @@
     }
     // Barre du bas (téléphone) et feuille « + ».
     document.querySelectorAll("#bottom-nav .bn-btn").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
+    // Dépenses qui reviennent souvent (cafette du midi, essence…) : on les
+    // déduit des 60 derniers jours et on les propose en pastilles d'un appui,
+    // au même montant et dans la même catégorie que d'habitude.
+    function frequentShortcuts() {
+      const since = new Date();
+      since.setDate(since.getDate() - 60);
+      const sinceIso = since.toISOString().slice(0, 10);
+      const groups = {};
+      for (const tx of allTransactions) {
+        if ((tx.type || "expense") !== "expense") continue;
+        if (tx.category === TRANSFER_CATEGORY || tx.transfer_account_id) continue;
+        if (!tx.expense_date || tx.expense_date < sinceIso) continue;
+        const label = normalizeLabel(tx.description);
+        if (!label) continue;
+        const amount = Math.round(Number(tx.amount) * 100) / 100;
+        if (!(amount > 0)) continue;
+        const key = `${label}|${amount}|${tx.category}`;
+        (groups[key] = groups[key] || []).push(tx);
+      }
+      const found = [];
+      for (const txs of Object.values(groups)) {
+        if (txs.length < 3) continue;
+        const latest = [...txs].sort((a, b) => b.expense_date.localeCompare(a.expense_date))[0];
+        found.push({
+          count: txs.length,
+          amount: Math.round(Number(latest.amount) * 100) / 100,
+          category: latest.category,
+          description: latest.description || null,
+          account_id: latest.account_id || null,
+        });
+      }
+      return found.sort((a, b) => b.count - a.count).slice(0, 4);
+    }
+
+    function renderQuickShortcuts() {
+      const box = document.getElementById("quick-add-chips");
+      const section = document.getElementById("quick-add-section");
+      if (!box) return;
+      box.innerHTML = "";
+      const items = frequentShortcuts();
+      section.hidden = items.length === 0;
+      for (const item of items) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "cat-chip";
+        const name = item.description || allCategoryLabels[item.category] || item.category;
+        chip.innerHTML = `${escapeHtml(categoryIcon(item.category))} ${escapeHtml(name)} · <strong>${escapeHtml(currencyFormatter.format(item.amount))}</strong>`;
+        chip.addEventListener("click", async () => {
+          chip.disabled = true;
+          try {
+            await apiFetch("/api/transactions", {
+              method: "POST",
+              body: JSON.stringify({
+                type: "expense",
+                amount: item.amount,
+                category: item.category,
+                description: item.description,
+                expense_date: todayIso(),
+                account_id: item.account_id,
+                transfer_account_id: null,
+              }),
+            });
+            closePlusSheet();
+            await loadTransactions();
+            showToast(`${name} · ${currencyFormatter.format(item.amount)} ajouté aujourd'hui`);
+          } catch (err) {
+            showToast("Erreur : " + err.message, true);
+          } finally {
+            chip.disabled = false;
+          }
+        });
+        box.appendChild(chip);
+      }
+    }
+
     function openPlusSheet() {
+      renderQuickShortcuts();
       document.getElementById("plus-sheet").classList.add("open");
       document.getElementById("plus-sheet-backdrop").classList.add("open");
     }
@@ -8579,16 +8662,50 @@
       workbookStructured = null;
     }
 
+    // Photo de ticket ou capture d'écran : on la reconvertit en JPEG (le HEIC
+    // des iPhone n'est pas lisible côté serveur) et on la réduit, pour rester
+    // sous la limite d'envoi. Si la conversion échoue, on envoie l'original.
+    async function imageToJpeg(file) {
+      const name = (file.name || "").toLowerCase();
+      const isImage = (file.type || "").startsWith("image/") || /\.(jpe?g|png|webp|gif|heic|heif)$/.test(name);
+      if (!isImage) return file;
+      try {
+        const bitmap = await new Promise((resolve, reject) => {
+          const img = new Image();
+          const url = URL.createObjectURL(file);
+          img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+          img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("image illisible")); };
+          img.src = url;
+        });
+        const max = 2000;
+        const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+        if (!blob || !blob.size) return file;
+        return new File([blob], (file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+      } catch (err) {
+        // Le HEIC des iPhone n'est lisible que par le navigateur : si la
+        // conversion échoue, l'envoyer tel quel ne servirait à rien.
+        if (/\.(heic|heif)$/.test(name)) {
+          throw new Error("photo au format HEIC illisible ici — réenregistre-la en JPEG (Photos › Partager › Copier la photo) ou fais une capture d'écran");
+        }
+        return file;
+      }
+    }
+
     async function postImportFile(url, file, extraFields = {}) {
       // Sur iPhone, un fichier choisi dans « Fichiers » peut ne pas être lu
       // tant qu'on ne l'a pas chargé en mémoire (ou être sur iCloud, pas
       // encore téléchargé) : on le lit d'abord, puis on le renvoie sous forme
       // de copie en mémoire, ce qui fiabilise l'envoi.
-      let safeFile = file;
+      let safeFile = await imageToJpeg(file);
       try {
-        const buf = await file.arrayBuffer();
+        const buf = await safeFile.arrayBuffer();
         if (!buf.byteLength) throw new Error("vide");
-        safeFile = new File([buf], file.name, { type: file.type || "application/octet-stream" });
+        safeFile = new File([buf], safeFile.name, { type: safeFile.type || "application/octet-stream" });
       } catch (readErr) {
         throw new Error("fichier illisible sur cet appareil (s'il est sur iCloud, ouvre-le d'abord dans Fichiers pour le télécharger)");
       }
@@ -9376,10 +9493,16 @@
         if (known.has(key)) continue;
         const months = new Set(txs.map((t) => monthKeyOf(t.expense_date)));
         if (months.size < 3) continue;
+        // Un abonnement passe une fois par mois : une habitude quotidienne au
+        // même prix (le café du midi) n'en est pas un.
+        if (txs.length > months.size * 1.6) continue;
         const amounts = txs.map((t) => Number(t.amount));
         const avg = amounts.reduce((a, b) => a + b, 0) / amounts.length;
         if (!amounts.every((a) => Math.abs(a - avg) <= avg * 0.1)) continue;
         const latest = [...txs].sort((a, b) => b.expense_date.localeCompare(a.expense_date))[0];
+        // Un abonnement résilié (plus rien depuis ~2 mois) n'a pas à être
+        // proposé : sinon l'appli redemande d'ajouter une charge terminée.
+        if (daysBetween(latest.expense_date, todayIso()) > 70) continue;
         found.push({ key, name: latest.description || key, amount: avg, category: latest.category, day: Number(latest.expense_date.slice(8, 10)), months: months.size });
       }
       return found.sort((a, b) => b.amount - a.amount).slice(0, 5);
@@ -10061,6 +10184,19 @@
         if (!st.known) continue;
         const ratio = st.balance / Number(acc.ceiling);
         if (ratio >= 0.95) alerts.push(["warn", `🏦 ${acc.name} proche de son plafond (${eur(st.balance)} / ${eur(Number(acc.ceiling))}) : au-delà, place le surplus ailleurs.`]);
+      }
+      // Relevé pas encore importé : un compte qui bouge d'habitude et qui n'a
+      // plus rien depuis deux semaines veut dire que son relevé est en retard.
+      for (const acc of allAccounts) {
+        if (acc.active === false) continue;
+        if (acc.kind !== "bank" && acc.kind !== "savings") continue;
+        const dates = allRows.filter((t) => t.account_id === acc.id && t.expense_date).map((t) => t.expense_date);
+        if (dates.length < 10) continue;
+        const last = dates.sort()[dates.length - 1];
+        const days = Math.floor(daysBetween(last, today));
+        if (days < 15) continue;
+        const d = new Date(last + "T00:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+        alerts.push(["warn", `🧾 ${acc.name} n'est à jour que jusqu'au ${d} (${days} jours) — pense à importer le relevé suivant.`]);
       }
       for (const p of activeProjects()) {
         const st = projectState(p);
