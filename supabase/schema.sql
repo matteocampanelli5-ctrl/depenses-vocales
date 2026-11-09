@@ -176,6 +176,10 @@ create index if not exists recurring_expenses_user_id_idx on recurring_expenses 
 -- déduite ni jugée par l'IA) — sert à calculer une économie potentielle si
 -- redirigée vers l'épargne. Pour une base déjà créée avant cette colonne.
 alter table recurring_expenses add column if not exists essentiality_rating int check (essentiality_rating between 1 and 5);
+-- Compte sur lequel la charge est prélevée (optionnel) : les occurrences
+-- matérialisées en transactions héritent de ce compte, pour que les soldes
+-- de compte tiennent compte des prélèvements automatiques.
+alter table recurring_expenses add column if not exists account_id uuid references accounts(id) on delete set null;
 
 -- Date de la dernière note d'essentialité (pour afficher "noté il y a X mois"
 -- dans le Plan d'épargne et suggérer, sans forcer, de la revoir). NULL tant

@@ -108,6 +108,7 @@ def sync_recurring_occurrences(client, user_id: str) -> None:
                     "category": item["category"],
                     "description": item["name"],
                     "expense_date": occurrence_date.isoformat(),
+                    "account_id": item.get("account_id"),
                     "recurring_expense_id": item["id"],
                     "occurrence_month": occurrence_month,
                     "user_id": user_id,
@@ -153,6 +154,7 @@ def create_recurring(item: RecurringExpenseIn, user_id: str = Depends(require_us
         "name": item.name.strip(),
         "amount": item.amount,
         "category": (item.category or "autre").strip() or "autre",
+        "account_id": item.account_id or None,
         "day_of_month": item.day_of_month,
         "start_date": item.start_date.isoformat() if item.start_date else None,
         "end_date": item.end_date.isoformat() if item.end_date else None,
@@ -178,6 +180,8 @@ def update_recurring(
             payload[key] = value.isoformat()
         elif isinstance(value, str):
             payload[key] = value.strip()
+            if key == "account_id" and not payload[key]:
+                payload[key] = None  # « aucun compte » se renvoie vide
         else:
             payload[key] = value
     if "essentiality_rating" in payload:

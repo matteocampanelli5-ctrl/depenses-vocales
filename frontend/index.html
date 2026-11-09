@@ -2373,6 +2373,10 @@
         <select id="rec-input-category"></select>
       </div>
       <div>
+        <label for="rec-input-account">Compte prélevé (optionnel)</label>
+        <select id="rec-input-account"></select>
+      </div>
+      <div class="form-row">
         <label for="rec-input-day">Jour du mois</label>
         <input type="number" id="rec-input-day" min="1" max="31" step="1" placeholder="1 à 31">
       </div>
@@ -6660,6 +6664,7 @@
     const recNameInput = document.getElementById("rec-input-name");
     const recAmountInput = document.getElementById("rec-input-amount");
     const recCategoryInput = document.getElementById("rec-input-category");
+    const recAccountInput = document.getElementById("rec-input-account");
     const recDayInput = document.getElementById("rec-input-day");
     const recStartDateInput = document.getElementById("rec-input-start-date");
     const recEndDateInput = document.getElementById("rec-input-end-date");
@@ -6693,6 +6698,23 @@
       if (btn) setRecurringType(btn.dataset.type);
     });
 
+    // Compte sur lequel la charge tombe : les occurrences créées chaque mois
+    // en héritent, pour que le solde du compte en tienne compte.
+    function populateRecurringAccounts(selectedValue = null) {
+      recAccountInput.innerHTML = "";
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "— Aucun —";
+      recAccountInput.appendChild(none);
+      for (const acc of sortedAccounts().filter((a) => a.active !== false)) {
+        const opt = document.createElement("option");
+        opt.value = acc.id;
+        opt.textContent = acc.name;
+        recAccountInput.appendChild(opt);
+      }
+      recAccountInput.value = selectedValue && allAccounts.some((a) => a.id === selectedValue) ? selectedValue : "";
+    }
+
     function openRecurringModal(item = null) {
       editingRecurringId = item ? item.id : null;
       recModalTitleEl.textContent = item ? "Modifier la charge récurrente" : "Nouvelle charge récurrente";
@@ -6701,6 +6723,7 @@
       recNameInput.value = item ? item.name : "";
       recAmountInput.value = item ? item.amount : "";
       populateRecurringCategories(recCurrentType, item ? item.category : "autre");
+      populateRecurringAccounts(item ? item.account_id : null);
       recDayInput.value = item ? item.day_of_month : "";
       recStartDateInput.value = item && item.start_date ? item.start_date : "";
       recEndDateInput.value = item && item.end_date ? item.end_date : "";
@@ -6730,6 +6753,7 @@
         name,
         amount,
         category: recCategoryInput.value,
+        account_id: recAccountInput.value || null,
         day_of_month: day,
         start_date: recStartDateInput.value || null,
         end_date: recEndDateInput.value || null,
@@ -6825,7 +6849,8 @@
 
         const sub = document.createElement("div");
         sub.className = "rec-sub";
-        sub.textContent = `Le ${item.day_of_month} de chaque mois`;
+        const accName = item.account_id ? (accountById(item.account_id) || {}).name : null;
+        sub.textContent = `Le ${item.day_of_month} de chaque mois` + (accName ? ` · ${accName}` : "");
 
         main.appendChild(top);
         main.appendChild(name);

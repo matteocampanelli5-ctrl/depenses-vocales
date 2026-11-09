@@ -116,6 +116,7 @@ class RecurringExpenseIn(BaseModel):
     name: str = Field(min_length=1)
     amount: float = Field(gt=0)
     category: str = "autre"
+    account_id: str | None = None  # compte prélevé (optionnel)
     day_of_month: int = Field(ge=1, le=31)
     start_date: date | None = None  # None => pas de date de début, compte dès maintenant
     end_date: date | None = None  # None => pas de date de fin, se répète indéfiniment
@@ -126,6 +127,7 @@ class RecurringExpenseUpdate(BaseModel):
     name: str | None = None
     amount: float | None = Field(default=None, gt=0)
     category: str | None = None
+    account_id: str | None = None
     day_of_month: int | None = Field(default=None, ge=1, le=31)
     start_date: date | None = None
     end_date: date | None = None
