@@ -774,6 +774,10 @@
   .recurring-candidate-enddate { margin-top: 0.45rem; display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--text-dim); }
   .recurring-candidate-enddate input[type="date"] { font-size: 0.8rem; }
 
+  .placement-tax-row { display: flex; gap: 0.55rem; align-items: flex-start; margin: 0.1rem 0 0.4rem; cursor: pointer; }
+  .placement-tax-row input { margin-top: 0.15rem; flex: none; width: 1rem; height: 1rem; }
+  .placement-detail { display: inline-block; margin-top: 0.3rem; font-size: 0.82rem; color: var(--muted); }
+  .placement-tax-row span { font-size: 0.82rem; color: var(--muted); line-height: 1.35; }
   /* Simulation de placement (épargne) */
   .placement-presets { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
   .placement-preset-btn {
@@ -2056,8 +2060,8 @@
           <select id="placement-from-account"></select>
         </div>
         <div class="placement-presets">
-          <button type="button" class="placement-preset-btn" data-rate="1.7" title="Taux en vigueur depuis le 1er août 2026">Livret A (1,7 %)</button>
-          <button type="button" class="placement-preset-btn" data-rate="7">Actions / ETF monde (~7%)</button>
+          <button type="button" class="placement-preset-btn" data-rate="1.7" data-taxed="0" title="Taux en vigueur depuis le 1er août 2026">Livret A (1,7 %)</button>
+          <button type="button" class="placement-preset-btn" data-rate="7" data-taxed="1">Actions / ETF monde (~7%)</button>
         </div>
         <div class="placement-inputs">
           <div>
@@ -2077,6 +2081,11 @@
             <input type="number" id="placement-years" min="1" step="1" value="5">
           </div>
         </div>
+        <label class="placement-tax-row">
+          <input type="checkbox" id="placement-tax">
+          <span>Déduire la flat tax (31,4 %) — à cocher si les intérêts sont imposés (Bricks, compte-titres). Le Livret A en est exonéré.</span>
+        </label>
+        <p class="recurring-hint" id="placement-mode-note" hidden></p>
         <div class="chart-wrap">
           <canvas id="chart-placement"></canvas>
         </div>
@@ -3051,6 +3060,37 @@
       return series;
     }
 
+    // Prélèvement forfaitaire unique 2026 : 12,8 % d'impôt sur le revenu
+    // + 18,6 % de prélèvements sociaux.
+    const FLAT_TAX = 0.314;
+    const BRICK_PRICE = 10;
+
+    // Bricks ne capitalise pas tout seul : les intérêts tombent dans le
+    // portefeuille et y dorment à 0 % jusqu'à ce qu'on rachète une brique,
+    // et une brique coûte 10 €. On simule exactement ça — intérêts nets
+    // versés chaque mois, achat dès que le portefeuille atteint 10 €, le
+    // reste patiente.
+    function computeBricksSeries(initial, monthlyContribution, annualRatePercent, years, taxed) {
+      const months = Math.max(1, Math.round(years * 12));
+      const monthlyRate = Math.pow(1 + annualRatePercent / 100, 1 / 12) - 1;
+      const keep = taxed ? 1 - FLAT_TAX : 1;
+      let placed = Math.floor(initial / BRICK_PRICE) * BRICK_PRICE;
+      let wallet = initial - placed;
+      const series = [placed + wallet];
+      let idleTotal = 0;
+      for (let m = 1; m <= months; m++) {
+        wallet += placed * monthlyRate * keep + monthlyContribution;
+        const bricks = Math.floor(wallet / BRICK_PRICE);
+        if (bricks > 0) {
+          placed += bricks * BRICK_PRICE;
+          wallet -= bricks * BRICK_PRICE;
+        }
+        idleTotal += wallet;
+        series.push(placed + wallet);
+      }
+      return { series, placed, wallet, idleAverage: idleTotal / months };
+    }
+
     function renderPlacementSimulation() {
       const canvas = document.getElementById("chart-placement");
       if (!canvas) return;
@@ -3059,9 +3099,31 @@
       const monthly = Math.max(0, Number(document.getElementById("placement-monthly").value) || 0);
       const rate = Math.max(0, Number(document.getElementById("placement-rate").value) || 0);
       const years = Math.max(1, Number(document.getElementById("placement-years").value) || 1);
+      const taxed = document.getElementById("placement-tax").checked;
+      const account = accountById(document.getElementById("placement-from-account").value);
+      const bricksMode = !!account && /bricks?/i.test(account.name || "");
 
-      const series = computePlacementSeries(initial, monthly, rate, years);
+      const bricks = bricksMode ? computeBricksSeries(initial, monthly, rate, years, taxed) : null;
+      const series = bricks
+        ? bricks.series
+        : computePlacementSeries(initial, monthly, taxed ? rate * (1 - FLAT_TAX) : rate, years);
       const months = series.length - 1;
+
+      const note = document.getElementById("placement-mode-note");
+      if (bricksMode) {
+        note.hidden = false;
+        note.innerHTML =
+          "<strong>Mode Bricks.</strong> Les intérêts ne se replacent pas tout seuls : ils tombent dans ton " +
+          "portefeuille et y dorment à 0 % jusqu'à atteindre 10 €, le prix d'une brique. La simulation rachète " +
+          "une brique dès que c'est possible. Elle suppose aussi que tous les projets paient à l'heure et que " +
+          "tu réinvestis chaque capital remboursé.";
+      } else if (taxed) {
+        note.hidden = false;
+        note.innerHTML = `Taux réellement appliqué : <strong>${(rate * (1 - FLAT_TAX)).toFixed(2).replace(".", ",")} %</strong> net, après la flat tax.`;
+      } else {
+        note.hidden = true;
+        note.innerHTML = "";
+      }
       const labels = series.map((_, i) => (
         i % 12 === 0 ? `An ${i / 12}` : ""
       ));
@@ -3096,18 +3158,29 @@
       const finalBalance = series[series.length - 1];
       const totalContributed = initial + monthly * months;
       const interestEarned = finalBalance - totalContributed;
+      let detail = "";
+      if (bricks) {
+        detail =
+          `<br><span class="placement-detail">Dont ${currencyFormatter.format(bricks.placed)} en briques ` +
+          `(${Math.round(bricks.placed / BRICK_PRICE)} briques) et ${currencyFormatter.format(bricks.wallet)} ` +
+          `en portefeuille. En moyenne ${currencyFormatter.format(bricks.idleAverage)} dorment à 0 %.</span>`;
+      }
       document.getElementById("placement-result").innerHTML =
         `Après ${years} an${years > 1 ? "s" : ""} : <strong>${currencyFormatter.format(finalBalance)}</strong> ` +
-        `(dont ${currencyFormatter.format(interestEarned)} d'intérêts, pour ${currencyFormatter.format(totalContributed)} versés).`;
+        `(dont ${currencyFormatter.format(interestEarned)} d'intérêts${taxed ? " nets d'impôt" : ""}, ` +
+        `pour ${currencyFormatter.format(totalContributed)} versés).${detail}`;
     }
 
     for (const id of ["placement-initial", "placement-monthly", "placement-rate", "placement-years"]) {
       document.getElementById(id).addEventListener("input", renderPlacementSimulation);
     }
+    document.getElementById("placement-tax").addEventListener("change", renderPlacementSimulation);
 
     document.querySelectorAll(".placement-preset-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         document.getElementById("placement-rate").value = btn.dataset.rate;
+        // Le Livret A est exonéré ; un ETF en compte-titres ne l'est pas.
+        if (btn.dataset.taxed != null) document.getElementById("placement-tax").checked = btn.dataset.taxed === "1";
         renderPlacementSimulation();
       });
     });
@@ -3141,6 +3214,8 @@
       const state = computeAccountState(acc);
       if (state.known) document.getElementById("placement-initial").value = Math.round(state.balance);
       if (acc.annual_rate_pct != null) document.getElementById("placement-rate").value = Number(acc.annual_rate_pct);
+      // Un livret réglementé est exonéré ; un placement ne l'est pas.
+      document.getElementById("placement-tax").checked = acc.kind === "investment";
       renderPlacementSimulation();
     });
 
