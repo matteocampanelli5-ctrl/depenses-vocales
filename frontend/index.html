@@ -2266,6 +2266,7 @@
   <div class="sheet-backdrop" id="plus-sheet-backdrop"></div>
   <div class="action-sheet" id="plus-sheet" role="dialog" aria-modal="true" aria-label="Ajouter et autres onglets">
     <div class="sheet-grip"></div>
+    <button type="button" class="sheet-btn rich" id="plus-context" hidden><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><span><span class="sheet-btn-t" id="plus-context-title"></span><span class="sheet-btn-s" id="plus-context-sub"></span></span></button>
     <p class="sheet-section" id="quick-add-section" hidden>Rapide · un appui enregistre</p>
     <div class="cat-chips quick-chips" id="quick-add-chips"></div>
     <button type="button" class="sheet-btn rich" id="plus-voice"><span class="sheet-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><span><span class="sheet-btn-t">Dicter</span><span class="sheet-btn-s">« 12 € de resto hier » ou une question</span></span></button>
@@ -4730,7 +4731,23 @@
       }
     }
 
+    // Sur Comptes, Récurrentes et Prêts, le « + » doit d'abord proposer ce que
+    // la page attend (« appuie sur + pour ajouter ta banque… »), pas seulement
+    // les actions de saisie d'opérations.
+    const PLUS_CONTEXT = {
+      wealth: ["Ajouter un compte", "Banque, livret ou placement (Bricks…)", () => openAccountModal()],
+      recurring: ["Ajouter une charge récurrente", "Abonnement, loyer, salaire…", () => openRecurringModal()],
+      loans: ["Ajouter un prêt", "Crédit, avec son remboursement", () => openLoanModal()],
+    };
     function openPlusSheet() {
+      const ctx = PLUS_CONTEXT[currentView];
+      const ctxBtn = document.getElementById("plus-context");
+      ctxBtn.hidden = !ctx;
+      if (ctx) {
+        document.getElementById("plus-context-title").textContent = ctx[0];
+        document.getElementById("plus-context-sub").textContent = ctx[1];
+        ctxBtn.onclick = () => { closePlusSheet(); ctx[2](); };
+      }
       renderQuickShortcuts();
       document.getElementById("plus-sheet").classList.add("open");
       document.getElementById("plus-sheet-backdrop").classList.add("open");
