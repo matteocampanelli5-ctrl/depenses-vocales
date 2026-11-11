@@ -10331,8 +10331,12 @@
       const w = Math.min(1, day / 12);
       const dailyRate = dailyHist == null ? dailyNow : dailyNow * w + dailyHist * (1 - w);
       // Occasionnel : on attend en moyenne autant que les mois précédents, moins ce qui est déjà passé.
-      const onceMonthlyHist = hist.length ? sum(h.once) / 3 : 0;
-      const onceExpected = Math.max(0, onceMonthlyHist - sum(c.once)) * ((dim - day) / dim);
+      // Les très gros montants (> 150 € : voiture, scolarité, remboursement…)
+      // sont exceptionnels et imprévisibles : ils ne servent pas à deviner la
+      // suite du mois, sinon un seul achat d'un mois fausserait tout.
+      const typical = (t) => Number(t.amount) <= 150;
+      const onceMonthlyHist = hist.length ? sum(h.once.filter(typical)) / 3 : 0;
+      const onceExpected = Math.max(0, onceMonthlyHist - sum(c.once.filter(typical))) * ((dim - day) / dim);
       return { dailyRate, dailyNow, onceSoFar: sum(c.once), onceExpected, onceList: c.once.sort((a, b) => b.amount - a.amount), dailySoFar: sum(c.daily), recurringSoFar: sum(c.recurring), usedHistory: dailyHist != null };
     }
 
