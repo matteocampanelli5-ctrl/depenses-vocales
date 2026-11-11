@@ -1465,6 +1465,16 @@
     border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; font-size: 0.82rem; cursor: pointer;
   }
   .cat-chip.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  /* Zones tactiles : au moins ~40 px de haut sur téléphone, sans changer le rendu */
+  .history-more { display: block; width: 100%; margin: 0.8rem 0 1.2rem; padding: 0.85rem 1rem; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 0.92rem; cursor: pointer; }
+  .link-btn { padding: 0.65rem 0.4rem; margin: -0.65rem -0.4rem; }
+  .today-hero-sub a { display: inline-block; padding: 0.55rem 0.3rem; margin: -0.55rem -0.3rem; }
+  .icon-btn { min-width: 40px; min-height: 40px; }
+  .hint-more { padding: 0.7rem 0.4rem; margin: -0.35rem -0.4rem; }
+  summary { padding: 0.6rem 0; }
+  .type-chip { min-height: 40px; }
+  #btn-reset-all { min-height: 44px; }
+  .section-title, .dashboard-row > h3, [data-collapsible] > h3 { min-height: 40px; display: flex; align-items: center; }
   .quick-chips { margin: 0 0.2rem 0.2rem; }
   .quick-chips:empty { display: none; }
   .quick-chips .cat-chip { padding: 0.55rem 0.8rem; font-size: 0.88rem; }
@@ -4212,7 +4222,23 @@
 
     // Construction de la liste de cartes affichée dans l'onglet Historique —
     // reçoit déjà la liste filtrée (voir applyHistoryFilters).
-    function renderTransactionList(transactions) {
+    // L'historique n'affiche que les lignes récentes d'abord : avec des
+    // centaines d'opérations, tout dessiner d'un coup ralentit le téléphone.
+    const HISTORY_PAGE = 120;
+    let historyShown = HISTORY_PAGE;
+    let historySignature = "";
+
+    function renderTransactionList(allMatching) {
+      const signature = allMatching.length + "|" + (allMatching[0] ? allMatching[0].id : "");
+      if (signature !== historySignature) {
+        historySignature = signature;
+        historyShown = HISTORY_PAGE;
+      }
+      // On coupe en fin de journée pour ne pas scinder un jour en deux.
+      let cut = Math.min(historyShown, allMatching.length);
+      while (cut < allMatching.length && allMatching[cut].expense_date === allMatching[cut - 1].expense_date) cut++;
+      const transactions = allMatching.slice(0, cut);
+      const remaining = allMatching.length - cut;
       listEl.innerHTML = "";
       if (transactions.length === 0) {
         emptyStateEl.style.display = "block";
@@ -4351,6 +4377,18 @@
         card.appendChild(amountEl);
         card.appendChild(actions);
         group.appendChild(card);
+      }
+
+      if (remaining > 0) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "history-more";
+        more.textContent = `Afficher plus (${remaining} opération${remaining > 1 ? "s" : ""} plus ancienne${remaining > 1 ? "s" : ""})`;
+        more.addEventListener("click", () => {
+          historyShown += HISTORY_PAGE * 2;
+          renderTransactionList(allMatching);
+        });
+        listEl.appendChild(more);
       }
     }
 
