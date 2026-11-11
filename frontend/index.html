@@ -10329,14 +10329,28 @@
       const dailyHist = hist.length ? sum(h.daily) / histDays : null;
       // Début de mois : peu de recul, on s'appuie davantage sur l'historique.
       const w = Math.min(1, day / 12);
-      const dailyRate = dailyHist == null ? dailyNow : dailyNow * w + dailyHist * (1 - w);
-      // Occasionnel : on attend en moyenne autant que les mois précédents, moins ce qui est déjà passé.
-      // Les très gros montants (> 150 € : voiture, scolarité, remboursement…)
-      // sont exceptionnels et imprévisibles : ils ne servent pas à deviner la
-      // suite du mois, sinon un seul achat d'un mois fausserait tout.
+      const base = dailyHist == null ? dailyNow : dailyNow * w + dailyHist * (1 - w);
+      // Les 14 derniers jours pèsent pour moitié : si la semaine est calme,
+      // la prévision le voit.
+      const recentStart = new Date(today + "T00:00:00"); recentStart.setDate(recentStart.getDate() - 13);
+      const recentIso = recentStart.toISOString().slice(0, 10);
+      const recentDaily = sum(hist.concat(cur).filter((t) => t.expense_date >= recentIso && classify(t) === "daily")) / 14;
+      const dailyRate = (base + recentDaily) / 2;
+      // Occasionnel, catégorie par catégorie : si tu as déjà fait ton plein
+      // d'essence ce mois-ci (autant que d'habitude), on n'en prévoit pas un
+      // deuxième. Les très gros montants (> 150 € : voiture, scolarité…)
+      // sont exceptionnels et ne servent pas à deviner la suite.
       const typical = (t) => Number(t.amount) <= 150;
-      const onceMonthlyHist = hist.length ? sum(h.once.filter(typical)) / 3 : 0;
-      const onceExpected = Math.max(0, onceMonthlyHist - sum(c.once.filter(typical))) * ((dim - day) / dim);
+      const perCat = (arr) => { const o = {}; for (const t of arr.filter(typical)) o[t.category] = (o[t.category] || 0) + Number(t.amount); return o; };
+      const histCat = perCat(h.once), curCat = perCat(c.once);
+      const monthsSeen = {};
+      for (const t of h.once.filter(typical)) (monthsSeen[t.category] = monthsSeen[t.category] || new Set()).add(monthKeyOf(t.expense_date));
+      const share = Math.min(1, (dim - day) / dim + 0.25);
+      let onceExpected = 0;
+      for (const [cat, tot] of Object.entries(histCat)) {
+        if (!monthsSeen[cat] || monthsSeen[cat].size < 2) continue; // une seule fois en 3 mois : pas une habitude
+        onceExpected += Math.max(0, tot / 3 - (curCat[cat] || 0)) * share;
+      }
       return { dailyRate, dailyNow, onceSoFar: sum(c.once), onceExpected, onceList: c.once.sort((a, b) => b.amount - a.amount), dailySoFar: sum(c.daily), recurringSoFar: sum(c.recurring), usedHistory: dailyHist != null };
     }
 
