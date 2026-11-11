@@ -10334,8 +10334,9 @@
       if (bankKnown) {
         html += `<p class="today-hero-label">Il te reste · ${escapeHtml(monthName)} · J-${remainingDays}</p>` +
           `<p class="today-big ${resteAVivre >= 0 ? "" : "negative"}">${escapeHtml(eur(resteAVivre))}</p>` +
-          `<p class="today-hero-sub">soit <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}/jour</strong> · prévision au ${dim} : <strong class="${forecast >= 0 ? "" : "negative"}">${escapeHtml(eur(forecast))}</strong></p>` +
-          `<details class="today-hero-more"><summary>Comment c'est calculé ?</summary>Argent sur ton compte ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))}. Prévision à ton rythme actuel de ${escapeHtml(eur(avgDaily))}/jour.</details>`;
+          `<p class="today-hero-sub">Tu peux dépenser <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}/jour</strong> jusqu'à la fin du mois · tu dépenses en moyenne <strong>${escapeHtml(eur(avgDaily))}/jour</strong></p>` +
+          `<p class="today-hero-sub">À ce rythme, il te restera <strong class="${forecast >= 0 ? "" : "negative"}">${escapeHtml(eur(forecast))}</strong> au ${dim}.</p>` +
+          `<details class="today-hero-more"><summary>Comment c'est calculé ?</summary>Argent sur ton compte ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))}. Jours restants : ${remainingDays + 1} (aujourd'hui compris). Ta moyenne : ${escapeHtml(eur(spentMonth))} dépensés ÷ ${day} jours = ${escapeHtml(eur(avgDaily))}/jour.</details>`;
       } else {
         html += `<p class="today-hero-label">${escapeHtml(monthName)} · J-${remainingDays}</p><p class="today-hero-sub">Pour voir <strong>ce qu'il te reste à dépenser ce mois-ci</strong>, ajoute ton compte courant dans <a href="#" data-goto="wealth">Comptes</a> et indique combien il y a dessus.</p>`;
       }
