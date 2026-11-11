@@ -567,6 +567,19 @@
 
   /* Sélecteur du tableau de bord : un seul graphique/bloc affiché à la fois
      (au lieu des 7 empilés), choisi via une rangée de puces défilante. */
+  .tx-more { margin: 0.5rem 0 0; }
+  .tx-more > summary { cursor: pointer; color: var(--text-dim); font-size: 0.9rem; padding: 0.6rem 0; min-height: 44px; display: flex; align-items: center; }
+  .tx-more[open] > summary { margin-bottom: 0.25rem; }
+  .welcome-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.1rem; margin: 0.75rem 0; }
+  .welcome-card h2 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+  .welcome-card > p { margin: 0 0 0.9rem; color: var(--text-dim); }
+  .welcome-step { display: flex; gap: 0.75rem; align-items: center; padding: 0.7rem 0; border-top: 1px solid var(--border); }
+  .welcome-step .num { flex: 0 0 2rem; height: 2rem; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; }
+  .welcome-step .txt { flex: 1; }
+  .welcome-step .txt small { display: block; color: var(--text-dim); }
+  .welcome-step button { white-space: nowrap; min-height: 44px; }
+  .welcome-step.done .num { background: var(--border); }
+  .welcome-step.done .txt { text-decoration: line-through; opacity: 0.6; }
   .dashboard-chip-row {
     display: flex;
     gap: 0.5rem;
@@ -2327,18 +2340,21 @@
         <label for="input-description">Description (optionnel)</label>
         <input type="text" id="input-description" placeholder="Ex : déjeuner avec Paul">
       </div>
-      <div>
-        <label for="input-date">Date</label>
-        <input type="date" id="input-date">
-      </div>
       <div id="tx-loan-wrap" class="hidden">
         <label for="input-loan">Prêt remboursé</label>
         <select id="input-loan"></select>
       </div>
-      <div id="tx-account-wrap">
-        <label for="input-account">Compte (optionnel)</label>
-        <select id="input-account"></select>
-      </div>
+      <details class="tx-more" id="tx-more">
+        <summary id="tx-more-summary">Plus d'options : date, compte</summary>
+        <div>
+          <label for="input-date">Date</label>
+          <input type="date" id="input-date">
+        </div>
+        <div id="tx-account-wrap">
+          <label for="input-account">Compte (optionnel)</label>
+          <select id="input-account"></select>
+        </div>
+      </details>
       <div id="tx-transfer-wrap" class="hidden">
         <div class="transfer-row">
           <div>
@@ -4022,6 +4038,11 @@
       refreshTxLoanField(tx && tx.loan_id ? tx.loan_id : "");
       descriptionInput.value = tx ? (tx.description || "") : "";
       dateInput.value = tx ? tx.expense_date : todayIso();
+      // Date du jour et pas de compte : on garde la fenêtre courte.
+      const moreEl = document.getElementById("tx-more");
+      moreEl.open = Boolean(tx && (tx.expense_date !== todayIso() || tx.account_id));
+      document.getElementById("tx-more-summary").textContent = "Plus d'options : date" + (allAccounts.length ? ", compte" : "");
+      document.getElementById("tx-account-wrap").style.display = allAccounts.length ? "" : "none";
 
       overlayEl.classList.remove("hidden");
       amountInput.focus();
@@ -5815,7 +5836,7 @@
       renderCategoryTrends(transactions);
       populateYearSelect(transactions);
       renderYearlyOverview(transactions);
-      setupDashboardChips();
+      setupDashboardChips(); refreshDashboardChipVisibility();
     }
 
     // -------------------------------------------------------------------
@@ -5872,6 +5893,18 @@
       }
       dashboardChipsBuilt = true;
       showDashboardSection(dashboardActiveSection);
+    }
+    // Peu de données : on ne propose que Dépenses / Revenus / Budgets, le
+    // reste (comparer, tendances…) n'a pas de sens avant quelques semaines.
+    function refreshDashboardChipVisibility() {
+      const dates = (allTransactions || []).map((t) => t.expense_date).filter(Boolean).sort();
+      const spanDays = dates.length ? daysBetween(dates[0], todayIso()) : 0;
+      const simple = spanDays < 35;
+      const basic = new Set(["expenses", "income", "budgets"]);
+      document.querySelectorAll(".dashboard-chip").forEach((chip) => {
+        chip.style.display = simple && !basic.has(chip.dataset.section) ? "none" : "";
+      });
+      if (simple && !basic.has(dashboardActiveSection)) showDashboardSection("expenses");
     }
 
     document.getElementById("dashboard-month-select").addEventListener("change", () => {
@@ -9453,6 +9486,8 @@
       listEl.innerHTML = "";
       totalsEl.innerHTML = "";
       const act = activeProjects();
+      const projRow = document.getElementById("projects-row");
+      if (projRow) projRow.style.display = (allProjects.length === 0 && !allAccounts.some((a) => a.kind === "investment")) ? "none" : "";
       if (allProjects.length === 0) {
         listEl.innerHTML = '<p class="recurring-hint">Aucun projet pour l\'instant.</p>';
         return;
@@ -10297,20 +10332,29 @@
       const monthName = new Date().toLocaleDateString("fr-FR", { month: "long" });
       let html = `<div class="today-hero">`;
       if (bankKnown) {
-        html += `<p class="today-hero-label">Reste à vivre · ${escapeHtml(monthName)} · J-${remainingDays}</p>` +
+        html += `<p class="today-hero-label">Il te reste · ${escapeHtml(monthName)} · J-${remainingDays}</p>` +
           `<p class="today-big ${resteAVivre >= 0 ? "" : "negative"}">${escapeHtml(eur(resteAVivre))}</p>` +
           `<p class="today-hero-sub">soit <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}/jour</strong> · prévision au ${dim} : <strong class="${forecast >= 0 ? "" : "negative"}">${escapeHtml(eur(forecast))}</strong></p>` +
-          `<details class="today-hero-more"><summary>Détail du calcul</summary>Solde courant ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))}. Prévision à ton rythme actuel de ${escapeHtml(eur(avgDaily))}/jour.</details>`;
+          `<details class="today-hero-more"><summary>Comment c'est calculé ?</summary>Argent sur ton compte ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))}. Prévision à ton rythme actuel de ${escapeHtml(eur(avgDaily))}/jour.</details>`;
       } else {
-        html += `<p class="today-hero-label">${escapeHtml(monthName)} · J-${remainingDays}</p><p class="today-hero-sub">Pour voir ton <strong>reste à vivre</strong>, ajoute ton compte courant dans <a href="#" data-goto="wealth">Comptes</a> et tape son solde réel.</p>`;
+        html += `<p class="today-hero-label">${escapeHtml(monthName)} · J-${remainingDays}</p><p class="today-hero-sub">Pour voir <strong>ce qu'il te reste à dépenser ce mois-ci</strong>, ajoute ton compte courant dans <a href="#" data-goto="wealth">Comptes</a> et indique combien il y a dessus.</p>`;
       }
-      html += starTrackHtml(game.now) + `</div>`;
+      const isFresh = allTransactions.length === 0;
+      if (!isFresh) html += starTrackHtml(game.now);
+      html += `</div>`;
+      if (isFresh) {
+        const hasAcc = allAccounts.length > 0;
+        html += `<div class="welcome-card"><h2>Bienvenue 👋</h2><p>Trois petites étapes, à ton rythme.</p>` +
+          `<div class="welcome-step ${hasAcc ? "done" : ""}"><span class="num">1</span><span class="txt">Ajoute ton compte<small>Ta banque, avec combien il y a dessus.</small></span>${hasAcc ? "" : '<button class="secondary" id="welcome-acc">Ajouter</button>'}</div>` +
+          `<div class="welcome-step"><span class="num">2</span><span class="txt">Note une dépense<small>Au clavier, ou en la disant à voix haute avec le micro.</small></span><button class="primary" id="welcome-tx">Noter</button></div>` +
+          `<div class="welcome-step"><span class="num">3</span><span class="txt">Regarde où va ton argent<small>L'onglet Stats se remplit tout seul.</small></span></div></div>`;
+      }
 
       html += `<div class="today-stats">` +
         `<div class="stat-card"><p class="label">Aujourd'hui</p><p class="value">${escapeHtml(eur(spentToday))}</p></div>` +
         `<div class="stat-card"><p class="label">Ce mois</p><p class="value">${escapeHtml(eur(spentMonth))}</p></div>` +
         `<div class="stat-card"><p class="label">Reçu</p><p class="value positive">${escapeHtml(eur(incomeMonth))}</p></div></div>`;
-      html += todayGameHtml(game);
+      if (!isFresh) html += todayGameHtml(game);
 
       // Alertes
       const alerts = [];
@@ -10349,7 +10393,7 @@
         else if (left >= 0 && left <= 30) alerts.push(["good", `📅 Le projet « ${p.name} » se termine dans ${left} jour${left > 1 ? "s" : ""}.`]);
       }
       if (alerts.length === 0) alerts.push(["good", "✅ Rien à signaler : budgets, plafonds et projets sont dans les clous."]);
-      html += `<h3 style="margin:1rem 0 0.25rem;">Alertes</h3>` + alerts.map(([c, t]) => `<div class="today-alert ${c}">${escapeHtml(t)}</div>`).join("");
+      if (!isFresh || alerts.some(([c]) => c !== "good")) html += `<h3 style="margin:1rem 0 0.25rem;">Alertes</h3>` + alerts.map(([c, t]) => `<div class="today-alert ${c}">${escapeHtml(t)}</div>`).join("");
 
       // À venir
       if (upcoming.length) {
@@ -10383,6 +10427,10 @@
       }
       root.innerHTML = html;
       root.querySelectorAll("[data-goto]").forEach((el) => el.addEventListener("click", (e) => { e.preventDefault(); switchView(el.dataset.goto); }));
+      const wAcc = root.querySelector("#welcome-acc");
+      if (wAcc) wAcc.addEventListener("click", () => { switchView("wealth"); openAccountModal(); });
+      const wTx = root.querySelector("#welcome-tx");
+      if (wTx) wTx.addEventListener("click", () => openModal());
       const lvlCard = root.querySelector("#game-level-card");
       if (lvlCard) lvlCard.addEventListener("click", () => switchView("rewards"));
       maybeShowLevelUp(game);
