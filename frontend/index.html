@@ -10427,7 +10427,7 @@
       const resteAVivre = bank + upInc - upExp;
       const forecast = resteAVivre - avgDaily * remainingDays - model.onceExpected;
       const monthNow = incomeMonth - spentMonth;
-      const monthEnd = incomeMonth + upInc + model.incomeExpected - spentMonth - upExp - avgDaily * remainingDays - model.onceExpected;
+      const monthEnd = incomeMonth + upInc - spentMonth - upExp - avgDaily * remainingDays - model.onceExpected;
 
       const game = gameState();
       const monthName = new Date().toLocaleDateString("fr-FR", { month: "long" });
