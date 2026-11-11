@@ -4151,13 +4151,9 @@
                 );
                 if (confirmed) {
                   for (const t of similar) {
+                    // Seule la catégorie change : l'intitulé du paiement
+                    // (« Maxi Coffee », « Five Guys »…) reste tel quel.
                     const fixPayload = { category: payload.category };
-                    // Comme pour la bannière de suggestion : la catégorie
-                    // porte maintenant l'info, on retire le mot-clé devenu
-                    // redondant de la description de CES transactions-là
-                    // (pas celle qu'on vient d'éditer à la main).
-                    const cleaned = stripMatchedKeywordsFromDescription(t.description, keywords);
-                    if (cleaned !== (t.description || null)) fixPayload.description = cleaned;
                     await apiFetch(`/api/transactions/${t.id}`, {
                       method: "PUT",
                       body: JSON.stringify(fixPayload),
@@ -6310,8 +6306,6 @@
         if (created) await saveCustomCategory(suggestion.type, value, finalLabel);
         for (const tx of similar) {
           const payload = { category: value };
-          const cleaned = stripMatchedKeywordsFromDescription(tx.description, suggestion.keywords);
-          if (cleaned !== (tx.description || null)) payload.description = cleaned;
           await apiFetch(`/api/transactions/${tx.id}`, { method: "PUT", body: JSON.stringify(payload) });
         }
         populateCategories(currentType === "transfer" ? "expense" : currentType, categoryInput.value);
@@ -6397,15 +6391,8 @@
 
       try {
         for (const id of idsToFix) {
+          // Seule la catégorie change : l'intitulé du paiement est conservé.
           const payload = { category: targetValue };
-          // La catégorie porte maintenant l'information : on retire des
-          // descriptions le(s) mot(s)-clé(s) qui ont servi à la détecter,
-          // pour éviter la redondance "casino" en catégorie ET en note.
-          const tx = allTransactions.find((t) => t.id === id);
-          if (tx && suggestion.keywords) {
-            const cleaned = stripMatchedKeywordsFromDescription(tx.description, suggestion.keywords);
-            if (cleaned !== (tx.description || null)) payload.description = cleaned;
-          }
           await apiFetch(`/api/transactions/${id}`, {
             method: "PUT",
             body: JSON.stringify(payload),
