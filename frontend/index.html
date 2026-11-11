@@ -10386,6 +10386,8 @@
       const avgDaily = model.dailyRate;
       const resteAVivre = bank + upInc - upExp;
       const forecast = resteAVivre - avgDaily * remainingDays - model.onceExpected;
+      const monthNow = incomeMonth - spentMonth;
+      const monthEnd = incomeMonth + upInc - spentMonth - upExp - avgDaily * remainingDays - model.onceExpected;
 
       const game = gameState();
       const monthName = new Date().toLocaleDateString("fr-FR", { month: "long" });
@@ -10395,7 +10397,7 @@
           `<p class="today-big ${resteAVivre >= 0 ? "" : "negative"}">${escapeHtml(eur(resteAVivre))}</p>` +
           `<p class="today-hero-sub">Tu peux dépenser <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}/jour</strong> jusqu'à la fin du mois · ton rythme au quotidien : <strong>${escapeHtml(eur(avgDaily))}/jour</strong></p>` +
           `<p class="today-hero-sub">À ce rythme, il te restera <strong class="${forecast >= 0 ? "" : "negative"}">${escapeHtml(eur(forecast))}</strong> au ${dim}.</p>` +
-          `<details class="today-hero-more"><summary>Comment c'est calculé ?</summary>Argent sur ton compte ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))}. Jours restants : ${remainingDays + 1} (aujourd'hui compris). Ton rythme au quotidien (${escapeHtml(eur(avgDaily))}/jour) ne compte que les dépenses de tous les jours${model.usedHistory ? ", lissées avec tes 3 derniers mois" : ""} : les dépenses ponctuelles ou occasionnelles (essence, cadeau, gros achat : ${escapeHtml(eur(model.onceSoFar))} ce mois-ci) et les charges récurrentes en sont exclues. ${model.onceExpected > 0.5 ? `Par prudence, la prévision garde ${escapeHtml(eur(model.onceExpected))} pour d'autres dépenses de ce genre d'ici la fin du mois (d'après tes mois précédents).` : ""}</details>`;
+          `<p class="today-hero-sub">Bilan du mois (revenus − dépenses) : <strong class="${monthNow >= 0 ? "" : "negative"}">${monthNow >= 0 ? "+" : ""}${escapeHtml(eur(monthNow))}</strong> aujourd'hui · prévu au ${dim} : <strong class="${monthEnd >= 0 ? "" : "negative"}">${monthEnd >= 0 ? "+" : ""}${escapeHtml(eur(monthEnd))}</strong></p>`;
       } else {
         html += `<p class="today-hero-label">${escapeHtml(monthName)} · J-${remainingDays}</p><p class="today-hero-sub">Pour voir <strong>ce qu'il te reste à dépenser ce mois-ci</strong>, ajoute ton compte courant dans <a href="#" data-goto="wealth">Comptes</a> et indique combien il y a dessus.</p>`;
       }
