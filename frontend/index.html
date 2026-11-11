@@ -10282,6 +10282,60 @@
       }
     }
 
+    // Modèle de dépenses « intelligent » pour la prévision de l'Accueil.
+    // Chaque dépense du mois est rangée dans l'une de trois cases :
+    //  - récurrente : déjà prévue (loyer, abonnement…), comptée à part ;
+    //  - ponctuelle / occasionnelle : essence, cadeau, gros achat… — ça ne se
+    //    produit pas chaque jour, donc on ne la multiplie pas par les jours
+    //    restants ;
+    //  - quotidienne : le café, les courses, le transport du jour… c'est elle
+    //    qui donne le vrai rythme par jour.
+    function spendingModel(today, monthKey, day, dim) {
+      const isExp = (t) => (t.type || "expense") === "expense" && t.category !== TRANSFER_CATEGORY && !t.transfer_account_id;
+      const recNames = allRecurring.filter((r) => (r.type || "expense") === "expense").map((r) => ({ key: normalizeLabel(r.name), amount: Number(r.amount), category: r.category }));
+      const isRecurringTx = (t) => {
+        const k = normalizeLabel(t.description), a = Number(t.amount);
+        return recNames.some((r) => (r.key && k && r.key === k) || (r.category === t.category && Math.abs(r.amount - a) <= Math.max(1, r.amount * 0.05)));
+      };
+      // Historique de référence : les 3 mois complets avant celui-ci.
+      const startD = new Date(today + "T00:00:00"); startD.setDate(1); startD.setMonth(startD.getMonth() - 3);
+      const histStart = startD.toISOString().slice(0, 10);
+      const monthStart = monthKey + "-01";
+      const hist = allTransactions.filter((t) => isExp(t) && t.expense_date >= histStart && t.expense_date < monthStart);
+      const cur = allTransactions.filter((t) => isExp(t) && monthKeyOf(t.expense_date) === monthKey);
+      // Par catégorie : montant médian et fréquence (sur 3 mois).
+      const stats = {};
+      for (const t of hist.concat(cur)) (stats[t.category] = stats[t.category] || []).push(Number(t.amount));
+      const median = (arr) => { const a = [...arr].sort((x, y) => x - y); const m = Math.floor(a.length / 2); return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+      const catInfo = {};
+      for (const [c, arr] of Object.entries(stats)) catInfo[c] = { med: median(arr), n: arr.length };
+      // Une dépense est ponctuelle si elle sort du lot de sa catégorie (plus
+      // de 3 fois le montant habituel) ou si la catégorie est rare et grosse
+      // (moins d'une fois par semaine en moyenne, plus de 20 € : l'essence, par ex.).
+      const classify = (t) => {
+        if (isRecurringTx(t)) return "recurring";
+        const a = Number(t.amount), ci = catInfo[t.category] || { med: a, n: 1 };
+        const rare = ci.n <= 12 && ci.med >= 20;
+        if (a >= 30 && ci.n >= 4 && a > ci.med * 3) return "once";
+        if (rare && a >= 20) return "once";
+        if (a >= 80) return "once";
+        return "daily";
+      };
+      const sum = (arr) => arr.reduce((x, t) => x + Number(t.amount), 0);
+      const split = (arr) => { const o = { daily: [], once: [], recurring: [] }; for (const t of arr) o[classify(t)].push(t); return o; };
+      const c = split(cur), h = split(hist);
+      const histDays = Math.max(1, daysBetween(histStart, monthStart));
+      const dailyNow = day > 0 ? sum(c.daily) / day : 0;
+      const dailyHist = hist.length ? sum(h.daily) / histDays : null;
+      // Début de mois : peu de recul, on s'appuie davantage sur l'historique.
+      const w = Math.min(1, day / 12);
+      const dailyRate = dailyHist == null ? dailyNow : dailyNow * w + dailyHist * (1 - w);
+      // Occasionnel : on attend en moyenne autant que les mois précédents, moins ce qui est déjà passé.
+      const onceMonthlyHist = hist.length ? sum(h.once) / 3 : 0;
+      const onceExpected = Math.max(0, onceMonthlyHist - sum(c.once)) * ((dim - day) / dim);
+      return { dailyRate, dailyNow, onceSoFar: sum(c.once), onceExpected, onceList: c.once.sort((a, b) => b.amount - a.amount), dailySoFar: sum(c.daily), recurringSoFar: sum(c.recurring), usedHistory: dailyHist != null };
+    }
+
     // Bloc « gaming » de l'Accueil (au-dessus du reste).
     function todayGameHtml(st) {
       let html = levelCardHtml(st);
@@ -10324,9 +10378,10 @@
         if (acc.kind === "bank" || acc.kind === "savings") liquid += st.balance;
       }
       const remainingDays = dim - day;
-      const avgDaily = day > 0 ? spentMonth / day : 0;
+      const model = spendingModel(today, monthKey, day, dim);
+      const avgDaily = model.dailyRate;
       const resteAVivre = bank + upInc - upExp;
-      const forecast = resteAVivre - avgDaily * remainingDays;
+      const forecast = resteAVivre - avgDaily * remainingDays - model.onceExpected;
 
       const game = gameState();
       const monthName = new Date().toLocaleDateString("fr-FR", { month: "long" });
@@ -10334,9 +10389,9 @@
       if (bankKnown) {
         html += `<p class="today-hero-label">Il te reste · ${escapeHtml(monthName)} · J-${remainingDays}</p>` +
           `<p class="today-big ${resteAVivre >= 0 ? "" : "negative"}">${escapeHtml(eur(resteAVivre))}</p>` +
-          `<p class="today-hero-sub">Tu peux dépenser <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}/jour</strong> jusqu'à la fin du mois · tu dépenses en moyenne <strong>${escapeHtml(eur(avgDaily))}/jour</strong></p>` +
+          `<p class="today-hero-sub">Tu peux dépenser <strong>${escapeHtml(eur(resteAVivre / Math.max(1, remainingDays + 1)))}/jour</strong> jusqu'à la fin du mois · ton rythme au quotidien : <strong>${escapeHtml(eur(avgDaily))}/jour</strong></p>` +
           `<p class="today-hero-sub">À ce rythme, il te restera <strong class="${forecast >= 0 ? "" : "negative"}">${escapeHtml(eur(forecast))}</strong> au ${dim}.</p>` +
-          `<details class="today-hero-more"><summary>Comment c'est calculé ?</summary>Argent sur ton compte ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))}. Jours restants : ${remainingDays + 1} (aujourd'hui compris). Ta moyenne : ${escapeHtml(eur(spentMonth))} dépensés ÷ ${day} jours = ${escapeHtml(eur(avgDaily))}/jour.</details>`;
+          `<details class="today-hero-more"><summary>Comment c'est calculé ?</summary>Argent sur ton compte ${escapeHtml(eur(bank))} − charges à venir ${escapeHtml(eur(upExp))} + revenus à venir ${escapeHtml(eur(upInc))}. Jours restants : ${remainingDays + 1} (aujourd'hui compris). Ton rythme au quotidien (${escapeHtml(eur(avgDaily))}/jour) ne compte que les dépenses de tous les jours${model.usedHistory ? ", lissées avec tes 3 derniers mois" : ""} : les dépenses ponctuelles ou occasionnelles (essence, cadeau, gros achat : ${escapeHtml(eur(model.onceSoFar))} ce mois-ci) et les charges récurrentes en sont exclues. ${model.onceExpected > 0.5 ? `Par prudence, la prévision garde ${escapeHtml(eur(model.onceExpected))} pour d'autres dépenses de ce genre d'ici la fin du mois (d'après tes mois précédents).` : ""}</details>`;
       } else {
         html += `<p class="today-hero-label">${escapeHtml(monthName)} · J-${remainingDays}</p><p class="today-hero-sub">Pour voir <strong>ce qu'il te reste à dépenser ce mois-ci</strong>, ajoute ton compte courant dans <a href="#" data-goto="wealth">Comptes</a> et indique combien il y a dessus.</p>`;
       }
