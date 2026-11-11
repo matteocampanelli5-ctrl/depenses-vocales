@@ -567,6 +567,12 @@
 
   /* Sélecteur du tableau de bord : un seul graphique/bloc affiché à la fois
      (au lieu des 7 empilés), choisi via une rangée de puces défilante. */
+  .help-block { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; margin: 0 0 0.6rem; padding: 0 1rem; }
+  .help-block > summary { cursor: pointer; font-weight: 600; min-height: 48px; display: flex; align-items: center; list-style: none; }
+  .help-block > summary::-webkit-details-marker { display: none; }
+  .help-block > summary::after { content: "›"; margin-left: auto; color: var(--text-dim); transition: transform .15s; }
+  .help-block[open] > summary::after { transform: rotate(90deg); }
+  .help-block[open] { padding-bottom: 0.9rem; }
   .tx-more { margin: 0.5rem 0 0; }
   .tx-more > summary { cursor: pointer; color: var(--text-dim); font-size: 0.9rem; padding: 0.6rem 0; min-height: 44px; display: flex; align-items: center; }
   .tx-more[open] > summary { margin-bottom: 0.25rem; }
@@ -2230,38 +2236,46 @@
     </section>
 
     <section id="view-help" class="help-section">
-      <h3 style="margin:0 0 0.25rem;">🎨 Apparence</h3>
-      <div class="theme-choice" id="theme-choice">
-        <button type="button" data-theme-value="dark">🌙 Sombre</button>
-        <button type="button" data-theme-value="rose">🌸 Rose doux</button>
-      </div>
-      <h3 style="margin:0 0 0.25rem;">⚙️ Préférences</h3>
-      <div class="checkbox-row"><label><input type="checkbox" id="pref-monthly-summary"> Recevoir un bilan du mois par email (le 1er de chaque mois)</label></div>
-      <div id="rules-block">
-        <h3 style="margin:1rem 0 0.25rem;">🧠 Catégories apprises</h3>
+      <details class="help-block">
+        <summary>🎨 Apparence</summary>
+        <div class="theme-choice" id="theme-choice">
+          <button type="button" data-theme-value="dark">🌙 Sombre</button>
+          <button type="button" data-theme-value="rose">🌸 Rose doux</button>
+        </div>
+      </details>
+      <details class="help-block">
+        <summary>⚙️ Préférences</summary>
+        <div class="checkbox-row"><label><input type="checkbox" id="pref-monthly-summary"> Recevoir un bilan du mois par email (le 1er de chaque mois)</label></div>
+      </details>
+      <details class="help-block" id="rules-block">
+        <summary>🧠 Catégories apprises</summary>
         <p class="recurring-hint">Quand tu corriges une catégorie pendant un import, l'appli s'en souvient pour les prochains relevés.</p>
         <div id="rules-list"></div>
-      </div>
-      <h3 style="margin:1rem 0 0.25rem;">🏷️ Mes catégories</h3>
-      <p class="recurring-hint">Crée tes propres catégories ici (ou directement pendant un import, via « ➕ Nouvelle catégorie… »). Une catégorie encore utilisée par des opérations ne peut pas être supprimée.</p>
-      <div class="filter-bar">
-        <select id="newcat-type" aria-label="Type"><option value="expense">Dépense</option><option value="income">Revenu</option></select>
-        <input type="text" id="newcat-name" maxlength="40" placeholder="Nom de la catégorie">
-        <button class="secondary" id="newcat-add-btn">Ajouter</button>
-      </div>
-      <div id="newcat-list"></div>
-      <h3 style="margin:1rem 0 0.25rem;">💾 Sauvegarde</h3>
-      <p class="recurring-hint">Télécharge une copie complète de tes données (à garder au chaud).</p>
-      <button class="secondary" id="backup-btn">Télécharger ma sauvegarde</button>
-      <p class="recurring-hint" style="margin-top:1.25rem;">
-        Toutes les fonctionnalités de l'appli, expliquées pas à pas. Appuie
-        sur une question pour voir le chemin à suivre.
-      </p>
-      <input type="text" id="help-search-input" placeholder="Rechercher dans l'aide...">
-      <div id="help-list" class="help-list"></div>
-      <div id="help-empty" class="empty-state" style="display:none;">
-        Aucun résultat pour cette recherche.
-      </div>
+      </details>
+      <details class="help-block">
+        <summary>🏷️ Mes catégories</summary>
+        <p class="recurring-hint">Crée tes propres catégories ici (ou pendant un import, via « ➕ Nouvelle catégorie… »).</p>
+        <div class="filter-bar">
+          <select id="newcat-type" aria-label="Type"><option value="expense">Dépense</option><option value="income">Revenu</option></select>
+          <input type="text" id="newcat-name" maxlength="40" placeholder="Nom de la catégorie">
+          <button class="secondary" id="newcat-add-btn">Ajouter</button>
+        </div>
+        <div id="newcat-list"></div>
+      </details>
+      <details class="help-block">
+        <summary>💾 Sauvegarde</summary>
+        <p class="recurring-hint">Télécharge une copie complète de tes données (à garder au chaud).</p>
+        <button class="secondary" id="backup-btn">Télécharger ma sauvegarde</button>
+      </details>
+      <details class="help-block">
+        <summary>❓ Questions fréquentes</summary>
+        <p class="recurring-hint">Toutes les fonctionnalités, expliquées pas à pas.</p>
+        <input type="text" id="help-search-input" placeholder="Rechercher dans l'aide...">
+        <div id="help-list" class="help-list"></div>
+        <div id="help-empty" class="empty-state" style="display:none;">
+          Aucun résultat pour cette recherche.
+        </div>
+      </details>
     </section>
   </main>
 
@@ -10341,17 +10355,29 @@
       // deuxième. Les très gros montants (> 150 € : voiture, scolarité…)
       // sont exceptionnels et ne servent pas à deviner la suite.
       const typical = (t) => Number(t.amount) <= 150;
-      const perCat = (arr) => { const o = {}; for (const t of arr.filter(typical)) o[t.category] = (o[t.category] || 0) + Number(t.amount); return o; };
-      const histCat = perCat(h.once), curCat = perCat(c.once);
-      const monthsSeen = {};
-      for (const t of h.once.filter(typical)) (monthsSeen[t.category] = monthsSeen[t.category] || new Set()).add(monthKeyOf(t.expense_date));
-      const share = Math.min(1, (dim - day) / dim + 0.25);
-      let onceExpected = 0;
-      for (const [cat, tot] of Object.entries(histCat)) {
-        if (!monthsSeen[cat] || monthsSeen[cat].size < 2) continue; // une seule fois en 3 mois : pas une habitude
-        onceExpected += Math.max(0, tot / 3 - (curCat[cat] || 0)) * share;
-      }
-      return { dailyRate, dailyNow, onceSoFar: sum(c.once), onceExpected, onceList: c.once.sort((a, b) => b.amount - a.amount), dailySoFar: sum(c.daily), recurringSoFar: sum(c.recurring), usedHistory: dailyHist != null };
+      const share = (dim - day) / dim;
+      // Montant habituel d'une catégorie sur un mois = médiane des 3 mois
+      // précédents (un mois exceptionnel ne la fausse pas) ; une catégorie
+      // vue moins de 2 mois sur 3 n'est pas une habitude.
+      const monthKeys = []; for (let i = 1; i <= 3; i++) { const d = new Date(today + "T00:00:00"); d.setDate(1); d.setMonth(d.getMonth() - i); monthKeys.push(d.toISOString().slice(0, 7)); }
+      const expectedRemaining = (histArr, curArr) => {
+        const byCat = {};
+        for (const t of histArr) { const o = (byCat[t.category] = byCat[t.category] || {}); const m = monthKeyOf(t.expense_date); o[m] = (o[m] || 0) + Number(t.amount); }
+        const curSum = {}; for (const t of curArr) curSum[t.category] = (curSum[t.category] || 0) + Number(t.amount);
+        let total = 0;
+        for (const [cat, months] of Object.entries(byCat)) {
+          if (Object.keys(months).length < 2) continue;
+          const vals = monthKeys.map((m) => months[m] || 0);
+          total += Math.max(0, median(vals) - (curSum[cat] || 0)) * share;
+        }
+        return total;
+      };
+      const onceExpected = expectedRemaining(h.once.filter(typical), c.once.filter(typical));
+      // Revenus : ceux qui reviennent d'habitude chaque mois (aide, salaire…)
+      // et qui ne sont pas encore arrivés ce mois-ci.
+      const isInc = (t) => t.type === "income" && t.category !== TRANSFER_CATEGORY && !t.transfer_account_id && Number(t.amount) <= 500;
+      const incomeExpected = expectedRemaining(allTransactions.filter((t) => isInc(t) && t.expense_date >= histStart && t.expense_date < monthStart), allTransactions.filter((t) => isInc(t) && monthKeyOf(t.expense_date) === monthKey));
+      return { dailyRate, incomeExpected, dailyNow, onceSoFar: sum(c.once), onceExpected, onceList: c.once.sort((a, b) => b.amount - a.amount), dailySoFar: sum(c.daily), recurringSoFar: sum(c.recurring), usedHistory: dailyHist != null };
     }
 
     // Bloc « gaming » de l'Accueil (au-dessus du reste).
@@ -10401,7 +10427,7 @@
       const resteAVivre = bank + upInc - upExp;
       const forecast = resteAVivre - avgDaily * remainingDays - model.onceExpected;
       const monthNow = incomeMonth - spentMonth;
-      const monthEnd = incomeMonth + upInc - spentMonth - upExp - avgDaily * remainingDays - model.onceExpected;
+      const monthEnd = incomeMonth + upInc + model.incomeExpected - spentMonth - upExp - avgDaily * remainingDays - model.onceExpected;
 
       const game = gameState();
       const monthName = new Date().toLocaleDateString("fr-FR", { month: "long" });
